@@ -264,6 +264,23 @@ measurements taken during development. Read it before trusting a verdict.
    not an edge at all. Candidate retrieval, not the direction estimator, is the weak link, and
    the harness does not yet score whole-DAG accuracy. Treat `trace` output as a ranked set of
    hypotheses for a human, which is what the disclaimer says.
+
+   **An attempted fix failed, and the attempt is shipped disabled rather than deleted.**
+   `stemma.phylogeny.proximity_gate` filters candidate parents by relative weight distance on the
+   principle that a direct child differs from its parent by one branch delta and a cousin by two.
+   It is implemented, tested and *off by default* (`build_phylogeny(..., proximity_factor=0.0)`),
+   because measuring it end to end showed it does not fix this case:
+   - It carries no signal when the child is heavily modified. Every candidate parent of the
+     30%-pruned `smollm2-prune-mag30` measures **ratio 1.00×** (root 0.1000, and the cousins
+     `merge-ties2` 0.1000, `sft` 0.1000, `int8` 0.1004) — the pruning delta dominates, so no ratio
+     threshold can separate the true parent from a cousin. The 100× margin that motivated the gate
+     holds only when the *child* sits close to its parent, which is not the failing case.
+   - It costs more than it saves: over a 20-model universe the trace went to **3.6 GiB of a 3.4 GiB
+     universe across 40,924 requests**, a 1× "reduction" — worse than a full download.
+   The genuine fix is a *cousin test* (detecting that a third model is an ancestor of both
+   endpoints), not a distance threshold. That is not implemented yet.
+   `transitive_reduction`, which removes an ancestor edge already implied by a longer path, **is**
+   enabled by default: it is pure topology and costs no bytes.
 10. **Fitting the combiner made it worse than the hand-set priors, so we ship the priors.** An L2
     logistic regression fitted on the benchmark's labelled pairs (21 train / 7 held out) scored
     **0.500 accuracy on decided — chance — against 1.000 for the priors** on the same split.

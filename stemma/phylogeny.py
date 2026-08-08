@@ -46,6 +46,96 @@ log = get_logger(__name__)
 #: Index-file format marker; bump when the .npz layout changes.
 INDEX_VERSION = "stemma-index-v1"
 
+PROXIMITY_FACTOR: float = 10.0
+"""How many times the *closest* candidate's delta a direct parent may be.
+
+Claim: low-false-positive -- this constant is the whole candidate-retrieval
+guard, so it is documented with the measurement that set it rather than with an
+intuition.
+
+A direct child differs from its parent by **one** branch delta.  A cousin --
+another descendant of the same ancestor -- differs by **two or more** (its own
+branch plus the other's), so it can never be as close as the true parent unless
+the two branches happen to cancel.  The gate turns that into a rule: a candidate
+whose relative delta is far larger than the best candidate's cannot be the
+direct parent.
+
+Measured on the benchmark universe, ``relative_delta`` of every candidate
+against ``smollm2-merge-ties2`` (10 shared 2-D tensors, 256 sampled rows)::
+
+    0.0004  smollm2-sft            <- TRUE PARENT (weight 0.6)
+    0.0007  smollm2-135m-root      <- real ancestor, but the GRANDparent
+    0.0012  smollm2-cpt            <- TRUE PARENT (weight 0.4)
+    0.0055  smollm2-lora-merged
+    0.0094  smollm2-int8
+    0.0995  smollm2-prune-mag30    <- cousin, wrongly chosen as a parent
+    0.1190  smollm2-sft-int4       <- cousin, wrongly chosen as a parent
+    0.1872  smollm2-vocab-ext      <- cousin
+
+The true parents sit at 0.0004 / 0.0012 and the nearest cousin at 0.0995: a
+**~100x gap**.  A factor of 10 therefore sits an order of magnitude inside the
+observed margin on *both* sides -- it would take a true parent 10x further from
+the child than the closest candidate, or a cousin 10x closer than measured,
+before the choice mattered.
+
+**MEASURED LIMITATION -- this gate is OFF by default in**
+:func:`build_phylogeny` (``proximity_factor=0.0``). Enable it deliberately.
+
+It was built to fix README limitation #9 and, measured end to end, it does not.
+Two findings killed the default:
+
+1. *It carries no signal when the child is heavily modified.* Candidate deltas
+   against the 30%-pruned ``smollm2-prune-mag30`` (whose true parent is
+   ``smollm2-135m-root``)::
+
+       0.1000  ratio 1.00x  smollm2-135m-root     <- TRUE PARENT
+       0.1000  ratio 1.00x  smollm2-merge-ties2   <- cousin
+       0.1000  ratio 1.00x  smollm2-sft           <- cousin
+       0.1004  ratio 1.00x  smollm2-int8          <- cousin
+
+   The pruning delta dominates, so *every* candidate is equidistant and no ratio
+   threshold can separate parent from cousin. The 100x margin quoted above holds
+   only when the *child* is close to its parent; the wrong edge in limitation #9
+   points at a heavily modified model, which is exactly the case it cannot see.
+   (The theoretical floor is worse than the benchmark suggests: for two equal,
+   orthogonal branches the cousin/parent ratio is only ``sqrt(2)`` ~ 1.41.)
+
+2. *It costs more than it saves.* Running the gate over a 20-model universe took
+   the trace from 2.3 GiB / 13k requests to **3.6 GiB of a 3.4 GiB universe over
+   40,924 requests** -- a 1x "reduction", i.e. worse than downloading
+   everything, because every candidate pair re-reads tensors.
+
+It is kept, tested and auditable because it *does* reject grossly distant
+candidates cheaply when a shared coordinate system is absent, and because the
+measurement is worth preserving. But a guard that does not fix the bug and
+triples transfer is not a default.
+
+The factor is a **ratio against the closest candidate, never an absolute
+threshold**, which is what makes it scale-free: a family whose fine-tunes move
+1e-5 of the weight norm and a family whose fine-tunes move 1e-1 are gated by the
+same number, because only the *contrast* between one branch and two branches is
+being tested.  An absolute threshold would have to be re-tuned per family and
+would silently mis-fire on the first checkpoint trained with a different
+learning rate.
+
+Proximity alone cannot remove the **grandparent** (``smollm2-135m-root`` at
+0.0007 is *closer* than the true parent ``smollm2-cpt`` at 0.0012, because a
+scar-free branch delta is small); that is what
+:func:`transitive_reduction` is for.
+"""
+
+#: Smallest sampled block (rows x cols) a tensor must contribute before it is
+#: allowed into a :func:`relative_delta` measurement. Small tensors (norms,
+#: biases, per-head projections in tiny models) are dominated by their own
+#: initialisation noise, so including them would blur the very contrast the
+#: proximity gate depends on.
+MIN_GATE_TENSOR_PARAMS: int = 65536
+
+#: Loader keyword arguments :func:`relative_delta` is allowed to forward to
+#: :func:`stemma.remote_loader.open_model`; everything else is a sibling
+#: module's knob and is dropped rather than raising.
+_LOADER_KW: frozenset = frozenset({"revision", "token", "cache_dir", "session"})
+
 #: Number of (role, depth) slots in a sketch presence mask.
 N_SLOTS = len(ROLES) * len(DEPTH_BUCKETS)
 
@@ -479,6 +569,288 @@ def find_candidate_parents(
 
 
 # --------------------------------------------------------------------------- #
+# proximity gate: one branch delta, not two
+# --------------------------------------------------------------------------- #
+
+
+def _flatten_rows(a: np.ndarray) -> np.ndarray:
+    """Collapse everything after the row axis so tensors compare as matrices."""
+    arr = np.asarray(a)
+    if arr.ndim == 0:
+        return arr.reshape(1, 1)
+    if arr.ndim == 1:
+        return arr.reshape(arr.shape[0], 1)
+    return arr.reshape(arr.shape[0], -1)
+
+
+def _shared_large_tensors(
+    idx_a: Mapping[str, Any], idx_b: Mapping[str, Any], n_tensors: int
+) -> List[Tuple[str, int]]:
+    """Shared 2-D tensors big enough to measure, largest first.
+
+    Returns ``(name, comparable_rows)`` pairs. ``comparable_rows`` is the row
+    count both models have, so a vocabulary-extended candidate is still
+    comparable over the rows it shares with the child.
+    """
+    out: List[Tuple[Tuple[int, str], str, int]] = []
+    for name in sorted(set(idx_a) & set(idx_b)):
+        sa = tuple(int(d) for d in (getattr(idx_a[name], "shape", ()) or ()))
+        sb = tuple(int(d) for d in (getattr(idx_b[name], "shape", ()) or ()))
+        if len(sa) != 2 or len(sb) != 2 or sa[1] != sb[1]:
+            continue
+        rows = min(sa[0], sb[0])
+        cols = sa[1]
+        if rows < 2 or cols < 2 or rows * cols < MIN_GATE_TENSOR_PARAMS:
+            continue
+        out.append(((-(rows * cols), name), name, rows))
+    out.sort(key=lambda t: t[0])
+    return [(name, rows) for _key, name, rows in out[: int(max(1, n_tensors))]]
+
+
+def _open_for_gate(ref: ModelRef, **loader_kw: Any) -> Any:
+    """Open a checkpoint through the Range loader, dropping foreign kwargs."""
+    from .remote_loader import open_model  # lazy: no network at import time
+
+    kw = {k: v for k, v in loader_kw.items() if k in _LOADER_KW}
+    return open_model(str(ref), **kw)
+
+
+def _relative_delta_core(
+    src_child: Any,
+    src_cand: Any,
+    *,
+    max_rows: int,
+    n_tensors: int,
+    row_cache: Optional[Dict[Tuple[str, int], np.ndarray]] = None,
+) -> float:
+    """``||cand - child||_F / ||cand||_F`` over identically sampled rows."""
+    from .remote_loader import select_rows  # lazy: no network at import time
+
+    idx_c, idx_p = src_child.index(), src_cand.index()
+    names = _shared_large_tensors(idx_c, idx_p, n_tensors)
+    if not names:
+        # No comparable tensor at all: a different architecture cannot be a
+        # *direct* parent, whatever a symmetric fingerprint says about it.
+        return float("inf")
+
+    num = 0.0
+    den = 0.0
+    used = 0
+    for name, rows_shared in names:
+        rows = select_rows(int(rows_shared), int(max_rows))
+        if rows.size == 0:
+            continue
+        key = (name, int(rows_shared))
+        child_block = None if row_cache is None else row_cache.get(key)
+        if child_block is None:
+            child_block = _flatten_rows(
+                src_child.get_tensor_rows(name, rows, dtype=np.float32)
+            ).astype(np.float64, copy=False)
+            if row_cache is not None:
+                row_cache[key] = child_block
+        cand_block = _flatten_rows(
+            src_cand.get_tensor_rows(name, rows, dtype=np.float32)
+        ).astype(np.float64, copy=False)
+        if child_block.shape != cand_block.shape or cand_block.size == 0:
+            continue
+        d = cand_block - child_block
+        num += float(np.einsum("ij,ij->", d, d))
+        den += float(np.einsum("ij,ij->", cand_block, cand_block))
+        used += 1
+
+    if used == 0 or den <= 0.0:
+        return float("inf")
+    return float(math.sqrt(max(num, 0.0)) / math.sqrt(den))
+
+
+def relative_delta(
+    child: ModelRef,
+    candidate: ModelRef,
+    *,
+    max_rows: int = 256,
+    n_tensors: int = 10,
+    seed: int = 0,
+    **loader_kw: Any,
+) -> float:
+    """How far ``candidate``'s weights sit from ``child``'s, as a pure ratio.
+
+    Claim: low-false-positive -- this is the measurement the candidate-retrieval
+    guard is built on: a direct child differs from its parent by *one* branch
+    delta, a cousin by two or more, so a candidate whose delta is far larger than
+    the closest one's cannot be the direct parent no matter how confidently the
+    direction estimator can orient the pair.
+
+    Computes ``||candidate - child||_F / ||candidate||_F`` over the shared 2-D
+    tensors of at least :data:`MIN_GATE_TENSOR_PARAMS` sampled parameters,
+    largest first, capped at ``n_tensors`` tensors x ``max_rows`` rows. Both
+    models are read at the **same** row indices
+    (:func:`stemma.remote_loader.select_rows`), so the number is comparable
+    across candidates rather than being an artefact of which rows were sampled.
+
+    Returns ``float('inf')`` when the two models share no comparable tensor: a
+    different architecture may well be an *ancestor* (distillation), but it
+    cannot be a direct weight-space parent, and ``inf`` is how that is said.
+
+    ``seed`` is accepted and recorded for signature symmetry with the rest of
+    the package; row selection here is deterministic by construction (it depends
+    only on the row count and the budget), so the value never changes the
+    result. Reads go through :mod:`stemma.remote_loader`, so the work stays a
+    Range read and every byte lands in the caller's transfer accounting.
+    """
+    value, _stats = _relative_delta_with_stats(
+        child, candidate, max_rows=max_rows, n_tensors=n_tensors, seed=seed, **loader_kw
+    )
+    return value
+
+
+def _relative_delta_with_stats(
+    child: ModelRef,
+    candidate: ModelRef,
+    *,
+    max_rows: int = 256,
+    n_tensors: int = 10,
+    seed: int = 0,
+    **loader_kw: Any,
+) -> Tuple[float, TransferStats]:
+    """:func:`relative_delta` plus the bytes it moved, for byte accounting."""
+    del seed  # deterministic sampling; kept in the public signature only
+    stats = TransferStats()
+    src_c = src_p = None
+    try:
+        src_c = _open_for_gate(child, **loader_kw)
+        src_p = _open_for_gate(candidate, **loader_kw)
+        value = _relative_delta_core(
+            src_c, src_p, max_rows=int(max_rows), n_tensors=int(n_tensors)
+        )
+    finally:
+        for src in (src_c, src_p):
+            if src is None:
+                continue
+            st = getattr(src, "stats", None)
+            if isinstance(st, TransferStats):
+                stats = stats.add(st)
+            try:
+                src.close()
+            except Exception:  # pragma: no cover - defensive
+                pass
+    return value, stats
+
+
+def proximity_gate(
+    child: ModelRef,
+    candidates: Sequence[ModelRef],
+    *,
+    factor: float = PROXIMITY_FACTOR,
+    max_rows: int = 256,
+    seed: int = 0,
+    **loader_kw: Any,
+) -> Tuple[List[str], Dict[str, float]]:
+    """Keep only candidates close enough to ``child`` to be its *direct* parent.
+
+    Claim: low-false-positive -- retrieval, not orientation, was the weak link:
+    a cousin that carries a quantisation or pruning scar produces a *confident*
+    direction verdict about a pair that is not an edge at all, and a confident
+    wrong edge beat a correct-but-abstaining one in the DAG builder. Gating on
+    proximity removes those pairs before they can be oriented.
+
+    Computes :func:`relative_delta` for every candidate, takes ``m`` = the
+    smallest finite value, and keeps the candidates with
+    ``delta <= m * factor``. See :data:`PROXIMITY_FACTOR` for the measurement
+    behind the default factor and for why a *ratio* (not an absolute threshold)
+    is the scale-free choice.
+
+    Returns ``(kept, deltas)`` where ``deltas`` maps **every** candidate to its
+    measured delta -- including the rejected ones, so the decision is auditable
+    rather than silent. A candidate whose delta is ``inf`` (no shared tensor, or
+    a read that failed) is never kept, whatever the factor: it cannot be a
+    direct weight-space parent. Passing ``factor <= 0`` or ``None`` widens the
+    gate to "any finite delta"; disabling the stage outright is
+    ``build_phylogeny(..., proximity_factor=0)``.
+    """
+    kept, deltas, _stats = _proximity_gate_with_stats(
+        child, candidates, factor=factor, max_rows=max_rows, seed=seed, **loader_kw
+    )
+    return kept, deltas
+
+
+def _proximity_gate_with_stats(
+    child: ModelRef,
+    candidates: Sequence[ModelRef],
+    *,
+    factor: float = PROXIMITY_FACTOR,
+    max_rows: int = 256,
+    n_tensors: int = 10,
+    seed: int = 0,
+    **loader_kw: Any,
+) -> Tuple[List[str], Dict[str, float], TransferStats]:
+    """:func:`proximity_gate` plus the bytes it moved, for byte accounting."""
+    del seed  # deterministic sampling; kept in the public signature only
+    cands: List[str] = []
+    for c in candidates or ():
+        cid = str(c)
+        if cid != str(child) and cid not in cands:
+            cands.append(cid)
+
+    deltas: Dict[str, float] = {}
+    stats = TransferStats()
+    if not cands:
+        return [], deltas, stats
+
+    src_c = None
+    row_cache: Dict[Tuple[str, int], np.ndarray] = {}
+    try:
+        src_c = _open_for_gate(child, **loader_kw)
+        for cid in cands:
+            src_p = None
+            try:
+                src_p = _open_for_gate(cid, **loader_kw)
+                deltas[cid] = _relative_delta_core(
+                    src_c,
+                    src_p,
+                    max_rows=int(max_rows),
+                    n_tensors=int(n_tensors),
+                    row_cache=row_cache,
+                )
+            except Exception as exc:
+                log.warning("relative_delta(%s, %s) failed: %s", child, cid, exc)
+                deltas[cid] = float("inf")
+            finally:
+                if src_p is not None:
+                    st = getattr(src_p, "stats", None)
+                    if isinstance(st, TransferStats):
+                        stats = stats.add(st)
+                    try:
+                        src_p.close()
+                    except Exception:  # pragma: no cover - defensive
+                        pass
+    finally:
+        if src_c is not None:
+            st = getattr(src_c, "stats", None)
+            if isinstance(st, TransferStats):
+                stats = stats.add(st)
+            try:
+                src_c.close()
+            except Exception:  # pragma: no cover - defensive
+                pass
+
+    finite = [v for v in deltas.values() if math.isfinite(v)]
+    if not finite:
+        log.debug("proximity gate: no candidate of %s shares a comparable tensor", child)
+        return [], deltas, stats
+
+    best = min(finite)
+    if factor is None or float(factor) <= 0.0:
+        limit = float("inf")
+    else:
+        # A best of exactly 0.0 (a bit-identical candidate) would collapse the
+        # window to {0.0}; fall back to an absolute floor so a re-upload does
+        # not evict every genuine parent.
+        limit = max(best * float(factor), 1e-12)
+    kept = [c for c in cands if math.isfinite(deltas[c]) and deltas[c] <= limit]
+    return kept, deltas, stats
+
+
+# --------------------------------------------------------------------------- #
 # relation classification
 # --------------------------------------------------------------------------- #
 
@@ -713,6 +1085,8 @@ def build_phylogeny(
     cache_dir: Optional[str] = None,
     seed: int = 0,
     support_threshold: float = 0.05,
+    proximity_factor: float = 0.0,  # OFF by default -- see PROXIMITY_FACTOR
+    reduce_transitive: bool = True,
     **kw: Any,
 ) -> Phylogeny:
     """Reconstruct a multi-parent lineage DAG over ``models``.
@@ -784,6 +1158,52 @@ def build_phylogeny(
             related.append((a, b, score))
         else:
             log.debug("dropping unrelated pair %s / %s (score %.3f)", a, b, score)
+
+    # ---- (2b) proximity gate --------------------------------------------- #
+    # ORDERING IS THE FIX. This must run BEFORE orientation, never after: the
+    # shipped bug (README limitation #9) was that a cousin carrying a pruning or
+    # quantisation scar produces a *confident* direction verdict, which then beat
+    # the correct-but-abstaining true parent. Gating here means such a pair never
+    # reaches estimate_direction at all. Running it afterwards would leave the
+    # confident-wrong edge already in hand and fix nothing.
+    gate_info: Dict[str, Any] = {"factor": float(proximity_factor or 0.0),
+                                 "dropped": {}, "kept": {}}
+    if proximity_factor and float(proximity_factor) > 0.0 and related:
+        by_node: Dict[ModelRef, List[ModelRef]] = {}
+        for a, b, _s in related:
+            by_node.setdefault(a, []).append(b)
+            by_node.setdefault(b, []).append(a)
+        survivors: set[Tuple[ModelRef, ModelRef]] = set()
+        for node, cands in by_node.items():
+            try:
+                kept_c, deltas, gstats = _proximity_gate_with_stats(
+                    node, cands, factor=float(proximity_factor), seed=seed, **kw
+                )
+            except Exception as exc:
+                log.warning("proximity gate failed for %s: %s", node, exc)
+                survivors.update((node, c) for c in cands)
+                continue
+            total_stats = total_stats.add(gstats)
+            gate_info["kept"][str(node)] = {c: float(deltas.get(c, float("nan")))
+                                            for c in kept_c}
+            dropped = [c for c in cands if c not in kept_c]
+            if dropped:
+                gate_info["dropped"][str(node)] = [
+                    (str(c), float(deltas.get(c, float("inf")))) for c in dropped
+                ]
+            survivors.update((node, c) for c in kept_c)
+        # A pair survives if it is plausible from EITHER endpoint's perspective.
+        # Requiring both is wrong and was measured to be: orientation has not run
+        # yet, so we do not know which model is the child, and the gate's claim is
+        # only "X could be a direct parent of Y" -- which need hold in one
+        # direction. Requiring both drove the benchmark trace from 2 wrong parents
+        # to 0 parents, discarding the true ones as well.
+        before = len(related)
+        related = [
+            (a, b, s) for (a, b, s) in related
+            if (a, b) in survivors or (b, a) in survivors
+        ]
+        log.debug("proximity gate: %d -> %d candidate pairs", before, len(related))
 
     # ---- (3) orientation ------------------------------------------------- #
     edges: List[Edge] = []
@@ -884,7 +1304,11 @@ def build_phylogeny(
             "verified provenance. Human review required."
         ),
     }
-    return Phylogeny(nodes=nodes, edges=edges, root_candidates=roots, meta=meta)
+    meta["proximity_gate"] = gate_info
+    result = Phylogeny(nodes=nodes, edges=edges, root_candidates=roots, meta=meta)
+    if reduce_transitive:
+        result = transitive_reduction(result)
+    return result
 
 
 def _transfer_dict(st: TransferStats) -> Dict[str, Any]:
@@ -990,6 +1414,86 @@ def _edge_label(e: Edge) -> str:
     if e.weight is not None and not math.isnan(float(e.weight)):
         label = f"{e.relation} w={float(e.weight):.2f} c={float(e.confidence):.2f}"
     return label
+
+
+def transitive_reduction(p: Phylogeny) -> Phylogeny:
+    """Drop each edge that a longer path already implies.
+
+    Claim: direction -- proximity gating removes *cousins*, but it cannot remove
+    an *ancestor that is not the direct parent*: on the benchmark the grandparent
+    ``smollm2-135m-root`` measured 0.0007 away from ``merge-ties2``, closer than
+    the true parent ``smollm2-cpt`` at 0.0012, so no distance threshold can
+    separate them. Topology can. If ``P -> C`` is claimed and some path
+    ``P -> ... -> C`` of length >= 2 also exists, the direct edge adds nothing
+    the longer, more specific path does not already say, so it is removed.
+
+    Returns a **new** :class:`~stemma.types.Phylogeny`; the input is not mutated.
+    An edge is never removed when it is the child's only remaining incoming
+    edge, so the reduction can never orphan a node that had a parent. Removals
+    are recorded in ``meta["transitive_reduction"]`` so the DAG stays auditable.
+    """
+    edges = list(p.edges)
+    if len(edges) < 2:
+        return Phylogeny(
+            nodes=list(p.nodes), edges=edges,
+            root_candidates=list(p.root_candidates), meta=dict(p.meta),
+        )
+
+    # Longest-path-first: removing a shortcut must not depend on iteration order,
+    # and considering the least-confident candidate shortcuts first keeps the
+    # strongest evidence when two edges could each be called redundant.
+    order = sorted(range(len(edges)), key=lambda i: float(edges[i].confidence or 0.0))
+    alive = [True] * len(edges)
+    removed: List[Dict[str, Any]] = []
+
+    def _reachable(src: str, dst: str, skip: int) -> Optional[List[str]]:
+        """Path src -> dst using live edges other than ``skip``, or None."""
+        stack: List[Tuple[str, List[str]]] = [(src, [src])]
+        seen = {src}
+        while stack:
+            node, path = stack.pop()
+            for j, e in enumerate(edges):
+                if not alive[j] or j == skip or e.parent != node:
+                    continue
+                if e.child == dst:
+                    return path + [dst]
+                if e.child not in seen:
+                    seen.add(e.child)
+                    stack.append((e.child, path + [e.child]))
+        return None
+
+    for i in order:
+        if not alive[i]:
+            continue
+        e = edges[i]
+        # Never orphan: keep this edge if it is the child's last incoming one.
+        incoming = sum(
+            1 for j, o in enumerate(edges) if alive[j] and o.child == e.child
+        )
+        if incoming <= 1:
+            continue
+        path = _reachable(e.parent, e.child, skip=i)
+        if path is not None and len(path) >= 3:  # >= 2 hops
+            alive[i] = False
+            removed.append(
+                {
+                    "parent": e.parent,
+                    "child": e.child,
+                    "via": path,
+                    "confidence": float(e.confidence or 0.0),
+                }
+            )
+
+    kept = [e for i, e in enumerate(edges) if alive[i]]
+    meta = dict(p.meta)
+    meta["transitive_reduction"] = removed
+    children = {e.child for e in kept}
+    return Phylogeny(
+        nodes=list(p.nodes),
+        edges=kept,
+        root_candidates=[n for n in p.nodes if n not in children],
+        meta=meta,
+    )
 
 
 def to_mermaid(p: Phylogeny, conflicts: Iterable[Any] = ()) -> str:

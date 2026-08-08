@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Stemma's evaluation harness: the headline table, the six figures, results.json.
+"""Stemma's evaluation harness: the headline table, the seven figures, results.json.
 
 Claim: infra -- this script proves nothing by itself; it is the instrument that
-*measures* the four claims the project makes, on four separate axes, and refuses
+*measures* the four claims the project makes, on five separate axes, and refuses
 to blend them into a single flattering number:
 
 1. **relatedness**   -- ROC AUC / average precision / FPR@95%TPR for Stemma and
@@ -22,9 +22,24 @@ to blend them into a single flattering number:
 4. **cost**          -- bytes and wall-clock seconds *per decision* for the
    Range path against a full download whose size is taken from the safetensors
    header / file listing. Nothing is ever fully downloaded, here or anywhere.
+5. **DAG reconstruction** -- the axis that axes 1-4 cannot see. Everything above
+   scores *pairwise* decisions on pairs the ground truth already certified as
+   edges, which is exactly how README limitation #9 survived to release: the
+   whole-universe phylogeny named two **cousins** as the parents of
+   ``smollm2-merge-ties2`` and nothing in the harness noticed. This axis builds
+   the DAG over the entire benchmark universe and scores it on exact edges, on
+   the ancestor closure (a grandparent edge is a milder error than a cousin
+   edge, and only the closure metric shows that), on root identification, and on
+   a confusion breakdown of the *wrong* edges by type -- cousin,
+   reversed, ancestor-not-parent, unrelated. Naming the failure mode is the
+   point; one more F1 would have hidden it again. It is run twice, once with the
+   cousin-rejection proximity gate off and once with the shipped default, so the
+   guard's effect is measured rather than asserted.
 
 Run ``python benchmarks/run.py --quick`` for the reduced grid, or
-``stemma bench --quick``. A failing pair is logged and counted, never fatal.
+``stemma bench --quick``. ``--dag-only`` runs axis 5 alone and splices its
+section into an existing results.json / RESULTS.md instead of overwriting them.
+A failing pair is logged and counted, never fatal.
 """
 
 from __future__ import annotations
@@ -116,6 +131,26 @@ _MERGE_METHODS = ("slerp", "ties", "dare", "linear", "task_arithmetic")
 #: the headline safety number is the false-positive rate the hard controls incur
 #: *there*.
 OPERATING_TPR = 0.95
+
+#: Keyword on ``stemma.phylogeny.build_phylogeny`` that switches the
+#: cousin-rejection proximity gate. It is written by a sibling module, so the
+#: DAG axis probes for it with ``inspect.signature`` and degrades loudly rather
+#: than assuming it exists. ``build_phylogeny`` swallows unknown keywords into
+#: ``**kw`` and forwards them to the loader, so the probe must be a real
+#: signature check and never a try/except.
+GATE_PARAM = "proximity_factor"
+
+#: How a *wrong* predicted edge is wrong. This vocabulary is the entire reason
+#: axis 5 exists: "cousin" is the failure README limitation #9 documents, and it
+#: is a categorically different mistake from "ancestor-not-parent" (a real
+#: ancestor, just not the direct one -- a transitive-reduction miss) or from
+#: "reversed" (right pair, wrong arrow).
+WRONG_EDGE_TYPES: Tuple[str, ...] = ("cousin", "reversed", "ancestor-not-parent", "unrelated")
+
+#: The concrete edge README limitation #9 is written about. The DAG axis reports
+#: what it recovered for this child under each gate setting, because a summary
+#: F1 would not tell a reader whether *that* bug is fixed.
+SPOTLIGHT_CHILD = "smollm2-merge-ties2"
 
 
 # --------------------------------------------------------------------------- #
@@ -1325,6 +1360,255 @@ class Harness:
             out.update({"ok": False, "skipped": True, "error": f"{type(exc).__name__}: {exc}"})
         return out
 
+    # ------------------------------------------- axis 5: DAG reconstruction --
+
+    def _dag_sketches(self, universe: Sequence[str]) -> Dict[str, Any]:
+        """``ref -> Sketch`` for the whole universe, reusing :meth:`prepare`'s work.
+
+        Claim: low-transfer -- the DAG is built twice (gate off, gate on) over 20
+        models; sketching them once and handing the dict to ``build_phylogeny``
+        keeps the second build from re-reading a single byte of weights.
+        """
+        from stemma.sketch import sketch_model
+
+        out: Dict[str, Any] = {}
+        for mid in universe:
+            ref = self.gt.ref(mid)
+            sk = self.sketches.get(mid)
+            if sk is None:
+                try:
+                    sk = sketch_model(ref, max_rows=self.budget.sketch_max_rows,
+                                      k=self.budget.sketch_k, seed=self.seed)
+                    self.sketches[mid] = sk
+                except Exception as exc:
+                    self.fail("dag", f"sketch:{mid}", exc)
+                    continue
+            out[ref] = sk
+        return out
+
+    def _build_dag(
+        self,
+        universe: Sequence[str],
+        sketches: Dict[str, Any],
+        gate: Optional[float],
+    ) -> Tuple[Any, TransferStats, float]:
+        """Run ``build_phylogeny`` over the whole universe at one gate setting.
+
+        Claim: direction -- this is the end-to-end product of the whole pipeline:
+        retrieval, relatedness gating, orientation and merge decomposition, with
+        no ground-truth pair list to lean on. ``gate`` is passed only when
+        ``build_phylogeny`` names it in its signature -- it swallows unknown
+        keywords into ``**kw`` and forwards them to the loader, so a blind pass
+        would be silently ignored and the two columns would differ by nothing.
+        """
+        from stemma.phylogeny import build_phylogeny
+
+        kw: Dict[str, Any] = {
+            "sketches": sketches,
+            "seed": self.seed,
+            "max_rows": self.budget.pair_max_rows,
+            "direction_abstain": float(self.args.abstain),
+        }
+        if gate is not None and _accepts_kwarg(build_phylogeny, GATE_PARAM):
+            kw[GATE_PARAM] = float(gate)
+        refs = [self.gt.ref(m) for m in universe]
+        t0 = time.perf_counter()
+        with byte_meter() as meter:
+            phylo = call_tolerant(build_phylogeny, refs, **kw)
+        return phylo, meter.totals(), time.perf_counter() - t0
+
+    def _dag_run(
+        self,
+        label: str,
+        universe: Sequence[str],
+        sketches: Dict[str, Any],
+        gate: Optional[float],
+        *,
+        applied: bool,
+    ) -> Dict[str, Any]:
+        """Build one DAG and score it against ``ground_truth.json``'s edges.
+
+        Claim: direction -- reports exact-edge P/R/F1, ancestor-closure P/R/F1,
+        root identification and the wrong-edge type breakdown for a single gate
+        setting; :meth:`run_dag` calls it twice so the guard is measured.
+        """
+        phylo, stats, seconds = self._build_dag(universe, sketches, gate)
+        edges: List[Tuple[str, str]] = []
+        info: Dict[Tuple[str, str], Dict[str, Any]] = {}
+        for e in getattr(phylo, "edges", []):
+            key = (self.gt.id_of(str(e.parent)), self.gt.id_of(str(e.child)))
+            edges.append(key)
+            info[key] = {
+                "confidence": float(getattr(e, "confidence", float("nan"))),
+                "relation": str(getattr(e, "relation", "")),
+                "weight": (None if getattr(e, "weight", None) is None
+                           else float(getattr(e, "weight"))),
+            }
+        roots = [self.gt.id_of(str(r)) for r in getattr(phylo, "root_candidates", [])]
+        scored = score_dag(edges, roots, self.gt.edges, universe, edge_info=info)
+        meta = dict(getattr(phylo, "meta", {}) or {})
+        scored.update({
+            "label": label,
+            GATE_PARAM: gate,
+            "gate_applied": bool(applied),
+            "seconds": float(seconds),
+            "bytes_read": float(stats.bytes_read),
+            "n_nodes": len(getattr(phylo, "nodes", []) or []),
+            "n_predicted_edges": len(edges),
+            "builder_meta": {
+                k: meta.get(k) for k in (
+                    "n_pairs_considered", "n_pairs_related", "n_direction_abstained",
+                    "n_cycle_edges_dropped", "relatedness_threshold", "direction_abstain",
+                    "max_distance", "k", "index_backend",
+                ) if k in meta
+            },
+            "spotlight": self._dag_spotlight(edges, info),
+        })
+        return scored
+
+    def _dag_spotlight(
+        self,
+        edges: Sequence[Tuple[str, str]],
+        info: Dict[Tuple[str, str], Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """What this DAG says the parents of the README-#9 child are.
+
+        Claim: direction -- limitation #9 is a claim about one concrete edge
+        (``smollm2-merge-ties2``, whose true parents are ``sft`` 0.6 and ``cpt``
+        0.4 but which was handed two cousins). A reader deserves to see that
+        specific answer, not only an F1 that could improve for other reasons.
+        """
+        child = SPOTLIGHT_CHILD
+        rec = self.gt.models.get(child)
+        if rec is None:
+            return {"child": child, "present": False}
+        truth = list(rec.parents) or sorted(rec.weights)
+        anc = ancestor_sets(self.gt.edges, list(self.gt.models))
+        truth_edges = {(str(e.get("parent")), str(e.get("child"))) for e in self.gt.edges}
+        got = []
+        for p, c in edges:
+            if c != child:
+                continue
+            ok = (p, c) in truth_edges
+            got.append({
+                "parent": p,
+                "correct": ok,
+                "type": None if ok else classify_wrong_edge(p, c, truth_edges, anc),
+                "confidence": info.get((p, c), {}).get("confidence"),
+                "weight": info.get((p, c), {}).get("weight"),
+            })
+        return {
+            "child": child,
+            "present": True,
+            "true_parents": truth,
+            "true_weights": dict(rec.weights),
+            "recovered_parents": got,
+            "exact": sorted(g["parent"] for g in got) == sorted(truth),
+        }
+
+    def run_dag(self) -> Dict[str, Any]:
+        """Axis 5: reconstruct the whole DAG and score it, gate off vs gate on.
+
+        Claim: direction -- axes 1-4 score pairwise decisions on pairs the ground
+        truth already certified as edges. That is precisely how README
+        limitation #9 shipped: on the full universe the builder preferred two
+        *cousins* (which carry pruning/quantisation scars, so the direction
+        estimator answers decisively) over the true, scar-free parents (on which
+        it abstains). This axis scores the artifact the user actually gets, and
+        breaks the wrong edges down by failure mode instead of collapsing them
+        into one number.
+        """
+        from stemma.phylogeny import build_phylogeny
+
+        universe = sorted(self.gt.models)
+        gate_supported = _accepts_kwarg(build_phylogeny, GATE_PARAM)
+        shipped_default = _default_of(build_phylogeny, GATE_PARAM)
+        override = self.args.proximity_factor
+        out: Dict[str, Any] = {
+            "available": True,
+            "n_universe": len(universe),
+            "n_ground_truth_edges": len(self.gt.edges),
+            "gate_parameter": GATE_PARAM,
+            "gate_supported": bool(gate_supported),
+            "gate_shipped_default": (None if shipped_default is None else float(shipped_default)),
+            "gate_override": (None if override is None else float(override)),
+            "metrics_note": (
+                "EDGE = exact parent->child pairs, direction-sensitive. CLOSURE = "
+                "transitive (ancestor, descendant) pairs, which forgives a "
+                "transitive-reduction miss but still punishes a cousin edge. "
+                "ROOT accuracy = fraction of true roots recovered as roots."
+            ),
+        }
+        sketches = self._dag_sketches(universe)
+        if not sketches:
+            out.update({"available": False, "reason": "no sketch could be built for the universe"})
+            return out
+
+        if not gate_supported:
+            out["degraded"] = (
+                f"stemma.phylogeny.build_phylogeny does not name {GATE_PARAM!r} in its "
+                "signature, so the proximity gate cannot be switched from here. The DAG "
+                "was built ONCE and the same numbers are reported in both columns: they "
+                "are identical by construction, not by measurement."
+            )
+            LOG.warning("%s", out["degraded"])
+            single = self._dag_run(
+                f"gate UNAVAILABLE (build_phylogeny has no {GATE_PARAM})",
+                universe, sketches, None, applied=False,
+            )
+            out["runs"] = {"gate_off": single, "gate_on": dict(single)}
+            out["delta"] = _dag_delta(single, single)
+            return out
+
+        on_value = float(override) if override is not None else shipped_default
+        specs = [
+            ("gate_off", f"gate OFF ({GATE_PARAM}=0)", 0.0, True),
+            ("gate_on",
+             f"gate ON ({GATE_PARAM}={_fmt(on_value, '.3g') if on_value is not None else 'default'}"
+             + (", --proximity-factor override" if override is not None else ", shipped default")
+             + ")",
+             on_value, True),
+        ]
+        runs: Dict[str, Any] = {}
+        for key, label, gate, applied in specs:
+            try:
+                runs[key] = self._dag_run(label, universe, sketches, gate, applied=applied)
+            except Exception as exc:
+                self.fail("dag", key, exc)
+                runs[key] = {"label": label, "error": f"{type(exc).__name__}: {exc}",
+                             GATE_PARAM: gate, "gate_applied": False}
+        out["runs"] = runs
+        if "error" not in runs.get("gate_off", {}) and "error" not in runs.get("gate_on", {}):
+            out["delta"] = _dag_delta(runs["gate_off"], runs["gate_on"])
+        return out
+
+
+def _dag_delta(off: Dict[str, Any], on: Dict[str, Any]) -> Dict[str, Any]:
+    """Gate-on minus gate-off for the headline DAG numbers.
+
+    Claim: direction -- the guard's effect is a *difference*, and printing it
+    explicitly stops a reader from having to subtract two tables by eye (and
+    stops the harness from claiming an improvement it did not measure).
+    """
+    def d(section: str, key: str) -> float:
+        try:
+            return float(on[section][key]) - float(off[section][key])
+        except (KeyError, TypeError, ValueError):
+            return float("nan")
+
+    cousins_off = int(off.get("wrong_edge_types", {}).get("cousin", 0))
+    cousins_on = int(on.get("wrong_edge_types", {}).get("cousin", 0))
+    return {
+        "edge_f1": d("edge", "f1"),
+        "edge_precision": d("edge", "precision"),
+        "edge_recall": d("edge", "recall"),
+        "closure_f1": d("closure", "f1"),
+        "root_accuracy": d("roots", "accuracy"),
+        "n_wrong_edges": int(on.get("n_wrong_edges", 0)) - int(off.get("n_wrong_edges", 0)),
+        "cousin_edges": cousins_on - cousins_off,
+        "seconds": float(on.get("seconds", 0.0)) - float(off.get("seconds", 0.0)),
+    }
+
 
 def _filter_kwargs(fn: Callable[..., Any], candidates: Dict[str, Any]) -> Dict[str, Any]:
     """Keep only the keyword arguments ``fn`` actually names in its signature.
@@ -1457,6 +1741,202 @@ def _common_ancestor(edges: Sequence[Dict[str, Any]], nodes: Sequence[str]) -> O
         a = anc(n)
         common = a if common is None else [x for x in common if x in a]
     return common[0] if common else None
+
+
+# --------------------------------------------------------------------------- #
+# Axis 5 helpers: whole-DAG scoring
+# --------------------------------------------------------------------------- #
+
+
+def child_to_parents(edges: Sequence[Dict[str, Any]]) -> Dict[str, List[str]]:
+    """Ground-truth ``child -> [parents]`` adjacency.
+
+    Claim: infra -- every axis-5 metric is derived from this map, so it is built
+    once and shared rather than re-walked per edge.
+    """
+    out: Dict[str, List[str]] = {}
+    for e in edges:
+        out.setdefault(str(e.get("child")), []).append(str(e.get("parent")))
+    return out
+
+
+def ancestor_sets(edges: Sequence[Dict[str, Any]], nodes: Iterable[str]) -> Dict[str, set]:
+    """Proper-ancestor set of every node in a directed edge list (cycle-safe).
+
+    Claim: direction -- an ancestor set only exists because edges are oriented,
+    and it is what separates a *cousin* error (shared ancestor, neither one an
+    ancestor of the other) from an *ancestor-not-parent* error. Collapsing those
+    two into "wrong edge" is what let README limitation #9 ship.
+    """
+    parents = child_to_parents(edges)
+    out: Dict[str, set] = {}
+    for n in nodes:
+        seen: set = set()
+        stack = list(parents.get(n, []))
+        while stack:
+            cur = stack.pop()
+            if cur in seen:
+                continue
+            seen.add(cur)
+            stack.extend(parents.get(cur, []))
+        seen.discard(n)
+        out[n] = seen
+    return out
+
+
+def closure_pairs(edges: Iterable[Tuple[str, str]], nodes: Iterable[str]) -> set:
+    """All ``(ancestor, descendant)`` pairs implied by a ``(parent, child)`` set.
+
+    Claim: direction -- the closure is the forgiving view of the same DAG: it
+    scores *reachability* rather than adjacency, so a recovered grandparent edge
+    still earns credit while a cousin edge -- which asserts reachability that the
+    truth does not contain -- is still punished. Reporting exact-edge and closure
+    F1 side by side is what makes the severity of an error visible.
+    """
+    children: Dict[str, List[str]] = {}
+    node_list = list(nodes)
+    for p, c in edges:
+        children.setdefault(str(p), []).append(str(c))
+        node_list.append(str(p))
+        node_list.append(str(c))
+    out: set = set()
+    for n in dict.fromkeys(node_list):
+        seen: set = set()
+        stack = list(children.get(n, []))
+        while stack:
+            cur = stack.pop()
+            if cur in seen:
+                continue
+            seen.add(cur)
+            stack.extend(children.get(cur, []))
+        seen.discard(n)
+        for d in seen:
+            out.add((n, d))
+    return out
+
+
+def set_prf(pred: set, truth: set) -> Dict[str, Any]:
+    """Precision / recall / F1 of a predicted set against a truth set.
+
+    Claim: infra -- shared by the exact-edge and ancestor-closure scores so the
+    two columns of the DAG table are computed by identical code.
+    """
+    tp = len(pred & truth)
+    fp = len(pred - truth)
+    fn = len(truth - pred)
+    precision = tp / (tp + fp) if (tp + fp) else float("nan")
+    recall = tp / (tp + fn) if (tp + fn) else float("nan")
+    if not (_finite(precision) and _finite(recall)) or (precision + recall) <= 0:
+        f1 = 0.0 if (tp + fp + fn) else float("nan")
+    else:
+        f1 = 2.0 * precision * recall / (precision + recall)
+    return {
+        "n_pred": len(pred), "n_truth": len(truth),
+        "tp": tp, "fp": fp, "fn": fn,
+        "precision": precision, "recall": recall, "f1": f1,
+    }
+
+
+def classify_wrong_edge(
+    parent: str, child: str, gt_edges: set, anc: Dict[str, set]
+) -> str:
+    """Name the failure mode of one wrong predicted edge.
+
+    Claim: low-false-positive -- this function is the point of axis 5. A wrong
+    edge between two models that merely share an ancestor ("cousin") means
+    candidate *retrieval* failed; a wrong edge to a genuine but indirect ancestor
+    means only the transitive reduction failed; a reversed edge means the
+    *direction* estimator failed. Those demand three different fixes, and one
+    aggregate F1 reports them identically.
+    """
+    if (child, parent) in gt_edges:
+        return "reversed"
+    a_p, a_c = anc.get(parent, set()), anc.get(child, set())
+    if parent in a_c:
+        return "ancestor-not-parent"
+    if child in a_p:
+        # A genuine ancestor relation stated backwards: still a direction error.
+        return "reversed"
+    if a_p & a_c:
+        return "cousin"
+    return "unrelated"
+
+
+def score_dag(
+    pred_edges: Sequence[Tuple[str, str]],
+    pred_roots: Sequence[str],
+    gt_edges: Sequence[Dict[str, Any]],
+    universe: Sequence[str],
+    *,
+    edge_info: Optional[Dict[Tuple[str, str], Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    """Score one reconstructed DAG against the ground-truth DAG.
+
+    Claim: direction -- exact-edge P/R/F1 (orientation-sensitive), ancestor
+    closure P/R/F1, root identification, and the wrong-edge confusion breakdown.
+    An abstained edge simply does not appear, so recall carries the cost of
+    abstention exactly as accuracy does on the direction axis.
+    """
+    universe = list(dict.fromkeys(str(u) for u in universe))
+    truth_edges = {(str(e.get("parent")), str(e.get("child"))) for e in gt_edges}
+    pred = {(str(p), str(c)) for p, c in pred_edges}
+    anc = ancestor_sets(gt_edges, universe)
+
+    edge = set_prf(pred, truth_edges)
+    closure = set_prf(closure_pairs(pred, universe), closure_pairs(truth_edges, universe))
+
+    true_roots = {n for n in universe if not anc.get(n)}
+    got_roots = {str(r) for r in pred_roots} or {n for n in universe if n not in {c for _, c in pred}}
+    roots = set_prf(got_roots, true_roots)
+    touched = {n for e in pred for n in e}
+    roots["n_isolated"] = len([n for n in universe if n not in touched])
+    roots["true_roots"] = sorted(true_roots)
+    roots["predicted_roots"] = sorted(got_roots)
+    roots["missed_roots"] = sorted(true_roots - got_roots)
+    roots["accuracy"] = roots["recall"]  # "are the true roots recovered as roots?"
+
+    breakdown = {t: 0 for t in WRONG_EDGE_TYPES}
+    wrong: List[Dict[str, Any]] = []
+    for p, c in sorted(pred - truth_edges):
+        kind = classify_wrong_edge(p, c, truth_edges, anc)
+        breakdown[kind] = breakdown.get(kind, 0) + 1
+        info = (edge_info or {}).get((p, c), {})
+        wrong.append({
+            "parent": p, "child": c, "type": kind,
+            "confidence": info.get("confidence"),
+            "relation": info.get("relation"),
+            "weight": info.get("weight"),
+        })
+    return {
+        "edge": edge,
+        "closure": closure,
+        "roots": roots,
+        "wrong_edge_types": breakdown,
+        "n_wrong_edges": len(wrong),
+        "wrong_edges": wrong,
+        "correct_edges": [{"parent": p, "child": c} for p, c in sorted(pred & truth_edges)],
+        "missed_edges": [{"parent": p, "child": c} for p, c in sorted(truth_edges - pred)],
+        "predicted_edges": [{"parent": p, "child": c} for p, c in sorted(pred)],
+    }
+
+
+def _default_of(fn: Optional[Callable[..., Any]], name: str) -> Any:
+    """Declared default of keyword ``name`` on ``fn``, or ``None``.
+
+    Claim: infra -- the "gate ON" column must print the value the shipped code
+    actually uses, and the only honest source for that is the signature itself.
+    """
+    if fn is None:
+        return None
+    try:
+        import inspect
+
+        p = inspect.signature(fn).parameters.get(name)
+        if p is None or p.default is inspect._empty:  # type: ignore[attr-defined]
+            return None
+        return p.default
+    except Exception:
+        return None
 
 
 # --------------------------------------------------------------------------- #
