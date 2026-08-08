@@ -277,8 +277,37 @@ measurements taken during development. Read it before trusting a verdict.
      holds only when the *child* sits close to its parent, which is not the failing case.
    - It costs more than it saves: over a 20-model universe the trace went to **3.6 GiB of a 3.4 GiB
      universe across 40,924 requests**, a 1× "reduction" — worse than a full download.
-   The genuine fix is a *cousin test* (detecting that a third model is an ancestor of both
-   endpoints), not a distance threshold. That is not implemented yet.
+   **The cousin test is now implemented and enabled**
+   (`stemma.phylogeny.cousin_veto`, `build_phylogeny(..., cousin_veto_enabled=True)`). It is
+   non-circular — it needs no prior DAG, only a third model: if `R` is the common ancestor of `A`
+   and `B` then their branches are independent and `cos(A−R, B−R) ≈ 0`, whereas a chain
+   `R → A → B` leaves `δ_A` inside `B − R` and scores strongly positive. Measured against
+   `smollm2-135m-root`: true edges **0.8442 / 0.7279 / 0.7183**, cousin pairs
+   **0.0053 / 0.0029 / −0.0004** — a ~140× gap, split at 0.15.
+
+   Two refinements came out of measurement, not intuition:
+   - *`R` must be a plausible ancestor, not any third model.* Accepting any `R` let an unrelated
+     model produce a spurious low cosine and veto a true edge. For orthogonal branches
+     `|A−B|² = |δ_A|² + |δ_B|²`, so a common ancestor is strictly closer to both endpoints than
+     they are to each other; requiring that took the test from 2/6 to **5/6** on real pairs.
+   - *Geometry is blind to a lossy child*, which sits equidistant from every candidate. Pruning is
+     a **mask**, so the entries the child kept are bit-identical to its input's:
+     `reconstruction_residual` scores the true parent at **0.000000** and the nearest cousin at
+     **0.000426**, and overrides the veto.
+
+   Measured end to end on the benchmark, it **halves the false parents (2 → 1) and cuts transfer
+   2×** (1.2 GiB of 2.3 GiB over 5,605 requests, against 2.3 GiB / 13,230 requests before), because
+   removing pairs before orientation saves more than the test costs.
+
+   It does **not** fully close this limitation, for two measured reasons:
+   - **Merge DAGs break the tree assumption.** `merge-ties2` is `0.6·sft + 0.4·cpt` and `cpt`
+     itself descends from `sft`, so `sft` is a genuine common ancestor of `cpt` and `ties2` *and*
+     `cpt` is a genuine parent of it. That is the one false veto in 6 (cos 0.0429 via `sft`).
+   - **The true parents are missing for a different reason entirely.** `trace` still reports
+     *no ancestors* for `merge-ties2`, because direction **abstains** on its scar-free
+     `sft`/`cpt` edges (limitation #2) so no edge is ever created. Outgroup rooting fixes exactly
+     that, but `build_phylogeny` does not yet supply siblings as outgroups automatically — the
+     clearest next step.
    `transitive_reduction`, which removes an ancestor edge already implied by a longer path, **is**
    enabled by default: it is pure topology and costs no bytes.
 10. **Fitting the combiner made it worse than the hand-set priors, so we ship the priors.** An L2

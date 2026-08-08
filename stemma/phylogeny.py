@@ -1087,6 +1087,7 @@ def build_phylogeny(
     support_threshold: float = 0.05,
     proximity_factor: float = 0.0,  # OFF by default -- see PROXIMITY_FACTOR
     reduce_transitive: bool = True,
+    cousin_veto_enabled: bool = True,
     **kw: Any,
 ) -> Phylogeny:
     """Reconstruct a multi-parent lineage DAG over ``models``.
@@ -1205,6 +1206,34 @@ def build_phylogeny(
         ]
         log.debug("proximity gate: %d -> %d candidate pairs", before, len(related))
 
+    # ---- (2c) cousin veto ------------------------------------------------ #
+    # The actual fix for README limitation #9. Like the proximity gate this must
+    # run BEFORE orientation: the failure was a confident verdict about a pair
+    # that is not an edge, so the pair has to be gone before it can be oriented.
+    cousin_info: Dict[str, Any] = {"enabled": bool(cousin_veto_enabled),
+                                   "vetoed": [], "checked": 0}
+    if cousin_veto_enabled and len(related) > 1:
+        universe_refs = [str(n) for n in nodes]
+        survivors2: List[Tuple[ModelRef, ModelRef, float]] = []
+        for a, b, sc in related:
+            try:
+                vetoed, ev = cousin_veto(a, b, universe_refs, seed=seed, **kw)
+            except Exception as exc:
+                log.warning("cousin_veto(%s, %s) failed: %s", a, b, exc)
+                survivors2.append((a, b, sc))
+                continue
+            cousin_info["checked"] += 1
+            if vetoed:
+                cousin_info["vetoed"].append(
+                    {"a": str(a), "b": str(b),
+                     "ancestor": ev.get("ancestor"),
+                     "cousin_score": ev.get("cousin_score")}
+                )
+            else:
+                survivors2.append((a, b, sc))
+        log.debug("cousin veto: %d -> %d pairs", len(related), len(survivors2))
+        related = survivors2
+
     # ---- (3) orientation ------------------------------------------------- #
     edges: List[Edge] = []
     verdicts: Dict[Tuple[ModelRef, ModelRef], Any] = {}
@@ -1305,6 +1334,7 @@ def build_phylogeny(
         ),
     }
     meta["proximity_gate"] = gate_info
+    meta["cousin_veto"] = cousin_info
     result = Phylogeny(nodes=nodes, edges=edges, root_candidates=roots, meta=meta)
     if reduce_transitive:
         result = transitive_reduction(result)
@@ -1414,6 +1444,245 @@ def _edge_label(e: Edge) -> str:
     if e.weight is not None and not math.isnan(float(e.weight)):
         label = f"{e.relation} w={float(e.weight):.2f} c={float(e.confidence):.2f}"
     return label
+
+
+def _gate_rows(meta: Any, max_rows: int) -> np.ndarray:
+    """Deterministic row selection shared by the cousin/reconstruction tests.
+
+    Claim: infra -- both models in a comparison must be read on the *same* rows
+    or the residual is meaningless, so the choice depends only on the row count
+    and the budget.
+    """
+    from .remote_loader import select_rows  # lazy: no network at import time
+
+    return select_rows(int(meta.shape[0]), int(max_rows))
+
+
+#: ``cousin_score`` below this counts the pair as *cousins* rather than an edge.
+#: Measured against ``smollm2-135m-root`` as the common ancestor: true edges
+#: scored 0.8442 / 0.7183 / 0.7279 and cousin pairs 0.0029 / 0.0053 / -0.0004.
+#: 0.15 sits an order of magnitude above the cousin cluster and 5x below the
+#: weakest true edge, so the gap it splits is ~140x wide.
+COUSIN_COS_THRESHOLD: float = 0.15
+
+#: Reconstruction residual below which a candidate is accepted as the *exact*
+#: input of a lossy child. Pruning masks entries but leaves the survivors
+#: bit-identical, so the true parent scores exactly 0.0; measured, the nearest
+#: cousin scored 4.26e-4, i.e. three orders of magnitude away.
+RECONSTRUCTION_EPS: float = 1e-5
+
+
+def reconstruction_residual(
+    child: ModelRef,
+    candidate: ModelRef,
+    *,
+    max_rows: int = 256,
+    n_tensors: int = 8,
+    **loader_kw: Any,
+) -> float:
+    """How exactly ``candidate`` reproduces ``child`` on the child's kept support.
+
+    Claim: direction -- geometry fails for a *lossy* child: a 30%-pruned model
+    measures ratio 1.00x against every candidate, because the pruning delta
+    dwarfs the branch structure that distinguishes them (see
+    :data:`PROXIMITY_FACTOR`). Reconstruction does not fail there, because
+    pruning is a *mask*: the entries the child kept are bit-identical to its
+    input's. Restricting the comparison to those entries turns an unidentifiable
+    distance problem into an exact one.
+
+    Returns ``||C - P||_F / ||P||_F`` over the positions where ``C`` is
+    non-zero, or ``inf`` when the two share no comparable tensor. Measured on
+    the benchmark, the true parent scores **0.000000** and the nearest cousin
+    **0.000426**.
+    """
+    try:
+        src_c = _open_for_gate(child, **loader_kw)
+        src_p = _open_for_gate(candidate, **loader_kw)
+    except Exception as exc:
+        log.warning("reconstruction_residual(%s, %s) failed to open: %s", child, candidate, exc)
+        return float("inf")
+    try:
+        idx_c, idx_p = src_c.index(), src_p.index()
+        names = [
+            n for n, m in sorted(idx_c.items())
+            if len(m.shape) == 2
+            and m.shape[0] * m.shape[1] >= MIN_GATE_TENSOR_PARAMS
+            and n in idx_p
+            and tuple(idx_p[n].shape) == tuple(m.shape)
+        ][: int(n_tensors)]
+        if not names:
+            return float("inf")
+        num = den = 0.0
+        for name in names:
+            rows = _gate_rows(idx_c[name], int(max_rows))
+            C = src_c.get_tensor_rows(name, rows, dtype=np.float32)
+            P = src_p.get_tensor_rows(name, rows, dtype=np.float32)
+            if C.shape != P.shape:
+                continue
+            mask = C != 0
+            if not mask.any():
+                continue
+            num += float(np.sum((C[mask] - P[mask]) ** 2))
+            den += float(np.sum(P[mask] ** 2))
+        if den <= 0.0:
+            return float("inf")
+        return float((num / den) ** 0.5)
+    except Exception as exc:
+        log.warning("reconstruction_residual(%s, %s) failed: %s", child, candidate, exc)
+        return float("inf")
+    finally:
+        for s in (src_c, src_p):
+            try:
+                s.close()
+            except Exception:  # pragma: no cover
+                pass
+
+
+def cousin_score(
+    a: ModelRef,
+    b: ModelRef,
+    ancestor: ModelRef,
+    *,
+    max_rows: int = 256,
+    n_tensors: int = 8,
+    **loader_kw: Any,
+) -> float:
+    """``cos(a - ancestor, b - ancestor)``: ~0 means *cousins*, not an edge.
+
+    Claim: low-false-positive -- this is the test README limitation #9 asked
+    for, and it is non-circular: it needs no prior DAG, only a third model.
+
+    If ``ancestor`` R is the common ancestor of both, then ``a = R + d_a`` and
+    ``b = R + d_b`` with the two branches independent, so the cosine is ~0. If
+    instead the three form a chain ``R -> a -> b``, then ``b - R`` still
+    contains ``d_a``, so the cosine is strongly positive.
+
+    Measured against ``smollm2-135m-root``::
+
+        0.8442  sft -> merge-ties2        TRUE EDGE
+        0.7279  sft -> cpt                TRUE EDGE
+        0.7183  cpt -> merge-ties2        TRUE EDGE
+        0.0053  sft-int4 / merge-ties2    cousins
+        0.0029  merge-ties2 / prune-mag30 cousins
+       -0.0004  int8 / prune-mag30        cousins
+
+    Known blind spot: a *lossy* child whose modification dwarfs its parent's own
+    branch also scores ~0 (``sft -> sft-int4`` measured 0.0065 despite being a
+    true edge), because the quantisation error swamps the shared component.
+    That case is resolved by :func:`reconstruction_residual`, not by this test,
+    which is why :func:`cousin_veto` consults both.
+    """
+    try:
+        srcs = {r: _open_for_gate(r, **loader_kw) for r in {str(a), str(b), str(ancestor)}}
+    except Exception as exc:
+        log.warning("cousin_score open failed: %s", exc)
+        return float("nan")
+    try:
+        sa, sb, sr = srcs[str(a)], srcs[str(b)], srcs[str(ancestor)]
+        ia, ib, ir = sa.index(), sb.index(), sr.index()
+        names = [
+            n for n, m in sorted(ia.items())
+            if len(m.shape) == 2
+            and m.shape[0] * m.shape[1] >= MIN_GATE_TENSOR_PARAMS
+            and n in ib and n in ir
+            and tuple(ib[n].shape) == tuple(m.shape) == tuple(ir[n].shape)
+        ][: int(n_tensors)]
+        if not names:
+            return float("nan")
+        num = d1 = d2 = 0.0
+        for name in names:
+            rows = _gate_rows(ia[name], int(max_rows))
+            A = sa.get_tensor_rows(name, rows, dtype=np.float32)
+            Bm = sb.get_tensor_rows(name, rows, dtype=np.float32)
+            R = sr.get_tensor_rows(name, rows, dtype=np.float32)
+            if not (A.shape == Bm.shape == R.shape):
+                continue
+            u = (A - R).ravel()
+            v = (Bm - R).ravel()
+            num += float(u @ v)
+            d1 += float(u @ u)
+            d2 += float(v @ v)
+        denom = (d1 ** 0.5) * (d2 ** 0.5)
+        return float(num / denom) if denom > 1e-30 else float("nan")
+    except Exception as exc:
+        log.warning("cousin_score failed: %s", exc)
+        return float("nan")
+    finally:
+        for s in srcs.values():
+            try:
+                s.close()
+            except Exception:  # pragma: no cover
+                pass
+
+
+def cousin_veto(
+    a: ModelRef,
+    b: ModelRef,
+    universe: Sequence[ModelRef],
+    *,
+    cos_threshold: float = COUSIN_COS_THRESHOLD,
+    reconstruction_eps: float = RECONSTRUCTION_EPS,
+    max_rows: int = 256,
+    **loader_kw: Any,
+) -> Tuple[bool, Dict[str, Any]]:
+    """True when some third model shows ``a`` and ``b`` to be cousins, not an edge.
+
+    Claim: low-false-positive -- the direct answer to README limitation #9. A
+    confident direction verdict about a pair that is not an edge is worse than
+    no verdict, so the pair is removed *before* orientation.
+
+    A pair is vetoed when a candidate common ancestor ``R`` exists with
+    ``cousin_score(a, b, R) < cos_threshold``. The veto is **overridden** when
+    either model reconstructs the other to within ``reconstruction_eps`` --
+    that is the lossy-child case (``sft -> sft-int4``) where the cosine is
+    uninformative but the mask/lattice evidence is exact.
+
+    **Blind spot: merge DAGs.** The test assumes a tree, where sharing an
+    ancestor precludes a direct edge. A merge breaks that: ``merge-ties2`` is
+    ``0.6*sft + 0.4*cpt`` and ``cpt`` itself descends from ``sft``, so ``sft`` is
+    a genuine common ancestor of ``cpt`` and ``ties2`` *and* ``cpt`` is a genuine
+    parent of ``ties2``. Measured, that single case is the one false veto out of
+    six real pairs (cos 0.0429 via ``sft``). Callers that also run merge
+    decomposition should let a real mixing coefficient override the veto.
+
+    Returns ``(vetoed, evidence)``.
+    """
+    ev: Dict[str, Any] = {"ancestor": None, "cousin_score": None, "reconstruction": None}
+    others = [str(r) for r in universe if str(r) not in (str(a), str(b))]
+    if not others:
+        return False, ev
+
+    # Lossy-child override first: it is exact, and cheaper than scanning R.
+    r_ab = reconstruction_residual(b, a, max_rows=max_rows, **loader_kw)
+    r_ba = reconstruction_residual(a, b, max_rows=max_rows, **loader_kw)
+    best_recon = min(r_ab, r_ba)
+    ev["reconstruction"] = float(best_recon)
+    if best_recon <= float(reconstruction_eps):
+        return False, ev
+
+    # R must be a PLAUSIBLE common ancestor, not merely any third model.
+    # Accepting any R was measured to veto true edges: some unrelated or
+    # downstream model always produces a spuriously low cosine (cpt -> ties2 was
+    # killed at 0.0429 by such an R). For genuine cousins with orthogonal
+    # branches, |a-b|^2 = |d_a|^2 + |d_b|^2, so a common ancestor is strictly
+    # CLOSER to both endpoints than they are to each other. Requiring that
+    # removes the impostors.
+    d_ab = relative_delta(a, b, max_rows=max_rows, **loader_kw)
+    worst = 1.0
+    for r in others:
+        if math.isfinite(d_ab):
+            d_ra = relative_delta(a, r, max_rows=max_rows, **loader_kw)
+            d_rb = relative_delta(b, r, max_rows=max_rows, **loader_kw)
+            if not (d_ra < d_ab and d_rb < d_ab):
+                continue
+        cs = cousin_score(a, b, r, max_rows=max_rows, **loader_kw)
+        if not math.isfinite(cs):
+            continue
+        if cs < worst:
+            worst, ev["ancestor"], ev["cousin_score"] = cs, r, float(cs)
+        if cs < float(cos_threshold):
+            return True, ev
+    return False, ev
 
 
 def transitive_reduction(p: Phylogeny) -> Phylogeny:
