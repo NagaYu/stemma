@@ -136,6 +136,53 @@ family; `--fit` remains available for anyone with a substantially larger labelle
 This is also why `fit()` forces `bias = 0` and `scaler_mean = 0`: a non-zero intercept or centring
 term would break the exact anti-symmetry `llr(a,b) == −llr(b,a)` that the whole estimator rests on.
 
+## 5d. Merging contracts toward the centroid, so outgroup rooting is invalid for merge children
+
+Section 4 introduced outgroup rooting and section 5b measured it lifting scar-free edges from
+**0% to 100%**. That result stands — and its scope is narrower than it looks. The measured set was
+pure fine-tunes (`sft` / `lora` / `cpt`). **Merges were never in it**, and rooting does not merely
+underperform on them, it is *invalid in principle*.
+
+Rooting assumes descendants drift monotonically away from the root, so that for an outgroup `C`,
+`d(parent, C) < d(child, C)`. A merge violates the assumption at its source. `merge-ties2` is
+`0.6·sft + 0.4·cpt`; `sft` and `cpt` are perturbations of the root in different directions, so
+their weighted average partially **cancels** those perturbations:
+
+```
+root -> sft            0.000820
+root -> cpt            0.001610
+root -> merge-ties2    0.000678   <- the CHILD is closer to the root than BOTH parents
+```
+
+The rooting premise then fails for every valid sibling outgroup:
+
+| outgroup `C` | `d(sft, C)` | `d(ties2, C)` | premise |
+|---|---|---|---|
+| `smollm2-int8` | 0.008917 | 0.008906 | **violated** |
+| `smollm2-prune-mag30` | 0.100506 | 0.100505 | **violated** |
+| `smollm2-vocab-ext` | 0.000820 | 0.000678 | **violated** |
+
+And the verdicts follow the broken premise. For `sft -> merge-ties2` (truth: `a->b`):
+
+| outgroup | llr | verdict |
+|---|---|---|
+| none | +0.0093 | abstains, sign correct |
+| `int8` (valid sibling) | −0.0089 | abstains, sign wrong |
+| `prune-mag30` (valid sibling) | −0.1003 | abstains, sign wrong |
+| `vocab-ext` (valid sibling) | **−1.2005** | **`b->a`, confidently wrong** |
+
+Every *correctly chosen* outgroup pushes the answer the wrong way. This is not a selector bug — an
+earlier attempt that picked outgroups by proximity was also wrong, but for the different and more
+mundane reason that the nearest relative of a merge child is one of its parents (see
+`_pick_outgroups`). Both are disabled.
+
+**Consequence for the method.** Weight-space rooting rests on a monotonicity assumption that
+model merging breaks by construction, and merging is now routine practice on the Hub. Direction
+for a merged model has to come from the *decomposition* — which parents reconstruct it, and in
+what proportion, where Stemma measures F1 0.900 and MAE 0.066 — and not from distance geometry.
+The two mechanisms are complementary rather than interchangeable, and conflating them is what made
+`trace` confidently wrong.
+
 ## 6. Transfer cost, measured
 
 Reading 8 tensors × 768 rows from **both** models of a pair:

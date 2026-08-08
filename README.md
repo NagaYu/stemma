@@ -322,9 +322,20 @@ measurements taken during development. Read it before trusting a verdict.
 
    `ties2` contains `0.4·cpt`, so it sits closer to `cpt` than `sft` does; the statistic reads that
    as "`ties2` is nearer the root" and inverts. End to end it also strengthened a *false* edge from
-   confidence 0.89 to 1.00. A correct selector must **exclude ancestors and descendants of both
-   endpoints** — which `cousin_veto` already identifies — instead of ranking by proximity. That is
-   the next step and it is not implemented.
+   confidence 0.89 to 1.00.
+
+   **Fixing the selector does not help either — the rooting premise itself fails on merges.**
+   Repeating the measurement with *correctly chosen* sibling outgroups (root-descendants that are
+   neither ancestor nor descendant of either endpoint) still gives the wrong sign every time:
+   `int8` −0.0089, `prune-mag30` −0.1003, `vocab-ext` **−1.2005 (`b->a`, confidently wrong)**,
+   against +0.0093 with no outgroup at all. The cause is structural: **merging is a contraction
+   toward the centroid.** `ties2 = 0.6·sft + 0.4·cpt` averages two perturbations of the root in
+   different directions, so it partially cancels them and lands *closer to the root than either
+   parent* (root→sft 0.000820, root→cpt 0.001610, **root→ties2 0.000678**). Rooting assumes
+   descendants drift monotonically away from the root; merging breaks that assumption by
+   construction, and merging is routine practice. Direction for a merged model must come from the
+   **decomposition** (F1 0.900, MAE 0.066), not from distance geometry. Full derivation in
+   [`docs/FINDINGS.md` §5d](docs/FINDINGS.md).
    `transitive_reduction`, which removes an ancestor edge already implied by a longer path, **is**
    enabled by default: it is pure topology and costs no bytes.
 10. **Fitting the combiner made it worse than the hand-set priors, so we ship the priors.** An L2
