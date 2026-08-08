@@ -495,11 +495,19 @@ def main() -> None:
     Space runtime; gradio is imported here, never at module import time.
     """
     demo = build_ui()
-    demo.queue(default_concurrency_limit=2).launch(
-        server_name="0.0.0.0",
-        server_port=int(os.environ.get("PORT", 7860)),
-        show_api=False,
-    )
+    kwargs = {
+        "server_name": os.environ.get("GRADIO_SERVER_NAME", "0.0.0.0"),
+        "server_port": int(os.environ.get("PORT", 7860)),
+    }
+    # `show_api` was removed in gradio 6 and raises TypeError there, but it is
+    # still wanted on gradio 4/5 where the Space would otherwise advertise an
+    # API tab. Pass it only when the running version accepts it rather than
+    # pinning a version the Space runtime may not honour.
+    import inspect
+
+    if "show_api" in inspect.signature(demo.launch).parameters:
+        kwargs["show_api"] = False
+    demo.queue(default_concurrency_limit=2).launch(**kwargs)
 
 
 if __name__ == "__main__":
