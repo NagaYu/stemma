@@ -104,6 +104,34 @@ confidently *wrong* in this run — it declines. For a provenance tool that is t
 mode, and it is why the benchmark reports accuracy-on-answered and abstention rate side by side
 rather than one blended accuracy.
 
+## 5c. Fitting the combiner made it *worse* than the hand-set priors. We ship the priors.
+
+`DirectionModel.fit()` exists and works, and we do not use its output as the default. Fitting an
+L2 logistic regression on the benchmark's labelled ordered pairs (21 train / 7 held out):
+
+| combiner | held-out accuracy on decided |
+|---|---|
+| hand-set priors (derived from irreversibility) | **1.000** |
+| fitted logistic regression | **0.500** — chance |
+
+The failure is instructive rather than mysterious. With **21 training pairs and 13 features** the
+problem is underdetermined, so the fit chases noise:
+
+- `lattice_asym` was assigned **−0.119**, i.e. "the model carrying the quantisation lattice is the
+  *parent*". That is physically impossible — dequantisation cannot restore the values that
+  rounding destroyed, so the scar can only ever appear downstream.
+- the largest-magnitude weight, **−0.910**, went to `subspace_energy_asym`, which section 3
+  measured as the *weakest* available signal (~10⁻³ against a per-tensor spread of the same order).
+
+A prior that encodes a physical impossibility is worth more than a coefficient fitted on 21
+examples. The shipped `DirectionModel.default()` therefore keeps large positive weights on the
+lossy-scar features, ~0 on `norm_growth_asym` (section 2), and small weights on the spectral
+family; `--fit` remains available for anyone with a substantially larger labelled corpus, and
+`fit_report.json` records this comparison so the choice is auditable rather than asserted.
+
+This is also why `fit()` forces `bias = 0` and `scaler_mean = 0`: a non-zero intercept or centring
+term would break the exact anti-symmetry `llr(a,b) == −llr(b,a)` that the whole estimator rests on.
+
 ## 6. Transfer cost, measured
 
 Reading 8 tensors × 768 rows from **both** models of a pair:

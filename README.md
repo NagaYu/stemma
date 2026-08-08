@@ -264,7 +264,15 @@ measurements taken during development. Read it before trusting a verdict.
    not an edge at all. Candidate retrieval, not the direction estimator, is the weak link, and
    the harness does not yet score whole-DAG accuracy. Treat `trace` output as a ranked set of
    hypotheses for a human, which is what the disclaimer says.
-10. **`stemma trace` over many small models saves nothing.** The per-model sampling floor is
+10. **Fitting the combiner made it worse than the hand-set priors, so we ship the priors.** An L2
+    logistic regression fitted on the benchmark's labelled pairs (21 train / 7 held out) scored
+    **0.500 held-out accuracy on decided — chance — against 1.000 for the priors**. With 13
+    features and 21 pairs the problem is underdetermined: the fit gave `lattice_asym` a *negative*
+    weight, i.e. "the quantised model is the parent", which is physically impossible, and put its
+    largest weight on the statistic measured as the weakest. `--fit` remains available for anyone
+    with a larger labelled corpus, and `fit_report.json` records the comparison. See
+    [`docs/FINDINGS.md` §5c](docs/FINDINGS.md).
+11. **`stemma trace` over many small models saves nothing.** The per-model sampling floor is
     roughly fixed, so on the 20-model benchmark universe (3.4 GiB of 256 MB checkpoints) a trace
     read 2.3 GiB — a 1× "reduction". The low-transfer claim is about *large* checkpoints, where
     the fixed floor is negligible: a single 15.2 GB model sketches at 0.644% (155×). Judge the
