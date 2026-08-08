@@ -1,0 +1,72 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "stemma"
+version = "0.1.0"
+description = "Model provenance from weights alone: derivation direction, multi-parent merges and mixing ratios, recovered over HTTP Range reads."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+keywords = [
+    "model-provenance",
+    "safetensors",
+    "ai-bom",
+    "lineage",
+    "model-merging",
+    "supply-chain",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "numpy>=1.24",
+    "scipy>=1.10",
+    "requests>=2.28",
+    "safetensors>=0.4",
+    # The library only uses HfApi, ModelCard and list_repo_files, all of which
+    # survive the 0.x -> 1.x major bump, so both lines are supported.
+    "huggingface_hub>=0.30",
+]
+
+[project.optional-dependencies]
+# NOTE ON A REAL CONFLICT: gradio >= 6 requires huggingface_hub >= 1.0, but
+# transformers 4.x pins huggingface_hub < 1.0.  Installing the `app` and `bench`
+# extras together therefore needs transformers >= 5, which is the first release
+# to support hub 1.x.  Pinning it here rather than leaving `transformers`
+# unbounded is deliberate: the unbounded form resolves to 4.57 and then fails at
+# import time with a version-check error the moment gradio is also installed.
+bench = [
+    "torch>=2.1",
+    "transformers>=5.0",
+    "datasets>=2.14",
+    "scikit-learn>=1.3",
+    "matplotlib>=3.7",
+    "networkx>=3.0",
+]
+app = [
+    "gradio>=6.0",
+    "graphviz>=0.20",
+]
+index = [
+    "faiss-cpu",
+]
+dev = [
+    "pytest",
+]
+
+[project.scripts]
+stemma = "stemma.cli:main"
+
+[tool.setuptools]
+packages = ["stemma"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

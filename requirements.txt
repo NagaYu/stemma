@@ -1,0 +1,15 @@
+# Hugging Face Space runtime for app.py (see pyproject.toml for the library).
+#
+# The Space only needs the analysis core plus gradio -- it never trains, so
+# torch/transformers are deliberately absent and the image stays small.
+#
+# gradio >= 6 requires huggingface_hub >= 1.0. Stemma's library code only uses
+# HfApi, ModelCard and list_repo_files, all of which survive that major bump.
+gradio>=6.0
+numpy>=1.24
+scipy>=1.10
+requests>=2.28
+safetensors>=0.4
+huggingface_hub>=1.0
+networkx>=3.0
+matplotlib>=3.7
