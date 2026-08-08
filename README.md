@@ -454,9 +454,9 @@ Exit codes: `0` ok, `1` error, `2` trace succeeded but rights conflicts were fou
 
 - **Code:** https://github.com/NagaYu/stemma
 - **Model** (`DirectionModel` weights + sketch config + prebuilt ANN index):
-  https://huggingface.co/YutaN13/stemma-direction
+  https://huggingface.co/NagaYu/stemma-direction
 - **Dataset** (benchmark lineage table + ground truth):
-  https://huggingface.co/datasets/YutaN13/stemma-bench
+  https://huggingface.co/datasets/NagaYu/stemma-bench
 - **Space (demo):** not deployed. Hugging Face requires a PRO subscription to host a **Gradio**
   Space on free CPU hardware (`402 Payment Required` on repo creation); only *static* Spaces are
   free, and `app.py` needs a Python backend. Run it locally instead:

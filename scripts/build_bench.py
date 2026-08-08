@@ -2266,6 +2266,40 @@ def validate_ground_truth(gt: Dict[str, Any], *, check_files: bool = True) -> Li
 # --------------------------------------------------------------------------- #
 
 
+#: Appended to every generated dataset card. These limits were measured *after*
+#: the dataset was first published and they change how its labels should be
+#: read, so they travel with the data rather than living only in the repo.
+_FINDINGS_APPENDIX: str = """
+
+## What these labels can and cannot support
+
+Measured on this dataset after it was first published:
+
+1. **Direction is near-deterministic only for *lossy* operations.** Quantisation, pruning and
+   vocabulary extension are recovered at 100%; scar-free `sft` / `lora` / `continued_pretrain`
+   edges abstain (mean |llr| ~0.02). Scoring direction as one aggregate over all relations hides
+   this, which is why the harness reports it per relation.
+2. **Outgroup rooting is invalid for the merge rows.** Rooting assumes descendants drift
+   monotonically away from the root. Merging is a *contraction toward the centroid*:
+   `smollm2-merge-ties2 = 0.6*sft + 0.4*cpt` partly cancels two perturbations of the root and
+   lands **closer to the root than either parent** (root->sft 0.000820, root->cpt 0.001610,
+   root->merge-ties2 0.000678). Every correctly chosen sibling outgroup then pushes the answer the
+   wrong way. Direction for a merged model has to come from the decomposition, not from distance
+   geometry.
+3. **Cross-architecture distillation rows are a known-weak case, not a bug.** They are included
+   and scored honestly rather than excluded.
+
+Current reference results on this dataset (`python benchmarks/run.py`): relatedness AUC 0.994 with
+**0.000 false-positive rate on the 25 same-architecture / different-seed controls**; merge
+parent-set precision **1.000**, recall 0.792, F1 0.867, mixing MAE 0.070 (DARE MAE **0.0004**).
+
+Derivations: https://github.com/NagaYu/stemma/blob/main/docs/FINDINGS.md
+
+These labels describe generated derivations, not claims about anyone's published models. Stemma
+reports statistical evidence with a confidence and never a determination of infringement.
+"""
+
+
 def dataset_card(gt: Dict[str, Any], repo: str = "<org>/<name>") -> str:
     """Render the dataset card shipped alongside a ``--push-to-hub`` upload.
 
@@ -2372,7 +2406,7 @@ def push_to_hub(gt: Dict[str, Any], repo: str, *, token: Optional[str] = None, p
     ds = Dataset.from_list(rows)
     ds.push_to_hub(repo, token=tok, private=private)
 
-    card = dataset_card(gt, repo)
+    card = dataset_card(gt, repo) + _FINDINGS_APPENDIX
     try:
         from huggingface_hub import HfApi  # noqa: PLC0415
 
@@ -2601,7 +2635,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     gt_path = ctx.out_dir / "ground_truth.json"
     atomic_write_json(gt_path, gt)
     card_path = ctx.out_dir / "DATASET_CARD.md"
-    card_path.write_text(dataset_card(gt), encoding="utf-8")
+    card_path.write_text(dataset_card(gt) + _FINDINGS_APPENDIX, encoding="utf-8")
     meta["elapsed_seconds"] = round(time.time() - t_start, 2)
     gt["meta"] = meta | gt["meta"]
     atomic_write_json(gt_path, gt)
