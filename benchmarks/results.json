@@ -20,9 +20,9 @@
       "requests": "2.32.4"
     },
     "index_backend": "faiss",
-    "git_revision": null,
+    "git_revision": "0ba8289",
     "seed": 0,
-    "timestamp_utc": "2026-08-08T06:56:27Z",
+    "timestamp_utc": "2026-08-08T13:13:10Z",
     "cwd": "/Users/nagaoyuta/Desktop/Claude code/24-Stemma"
   },
   "config": {
@@ -2545,7 +2545,7 @@
         "correct": false,
         "abstained": true,
         "bytes": 22640.0,
-        "seconds": 0.002119708999998693
+        "seconds": 0.0020920829992974177
       },
       {
         "a": "smollm2-135m-root",
@@ -2558,7 +2558,7 @@
         "correct": false,
         "abstained": true,
         "bytes": 12005008.0,
-        "seconds": 0.8705887500000244
+        "seconds": 0.8930614159980905
       },
       {
         "a": "smollm2-135m-root",
@@ -2571,7 +2571,7 @@
         "correct": false,
         "abstained": true,
         "bytes": 12005008.0,
-        "seconds": 0.8401602079998156
+        "seconds": 0.8562681669973244
       },
       {
         "a": "smollm2-135m-root",
@@ -2584,7 +2584,7 @@
         "correct": false,
         "abstained": true,
         "bytes": 12005008.0,
-        "seconds": 0.8737948339999093
+        "seconds": 0.8888154160013073
       },
       {
         "a": "smollm2-sft",
@@ -2597,7 +2597,7 @@
         "correct": false,
         "abstained": true,
         "bytes": 12005008.0,
-        "seconds": 0.8718447090000154
+        "seconds": 0.8942285000011907
       },
       {
         "a": "smollm2-135m-root",
@@ -2610,7 +2610,7 @@
         "correct": true,
         "abstained": false,
         "bytes": 12004736.0,
-        "seconds": 0.8738589169997795
+        "seconds": 0.8906302499999583
       },
       {
         "a": "smollm2-135m-root",
@@ -2623,7 +2623,7 @@
         "correct": true,
         "abstained": false,
         "bytes": 12004736.0,
-        "seconds": 0.8683006250003018
+        "seconds": 0.9107000000003609
       },
       {
         "a": "smollm2-sft",
@@ -2636,7 +2636,7 @@
         "correct": true,
         "abstained": false,
         "bytes": 12004736.0,
-        "seconds": 0.8687229170000137
+        "seconds": 0.8914064999989932
       },
       {
         "a": "gpt2-root",
@@ -2649,7 +2649,7 @@
         "correct": true,
         "abstained": false,
         "bytes": 33058752.0,
-        "seconds": 1.2376183339997624
+        "seconds": 1.3425033329986036
       },
       {
         "a": "smollm2-135m-root",
@@ -2662,7 +2662,7 @@
         "correct": true,
         "abstained": false,
         "bytes": 12005008.0,
-        "seconds": 0.8567647500003659
+        "seconds": 0.8894079999990936
       },
       {
         "a": "smollm2-135m-root",
@@ -2675,7 +2675,7 @@
         "correct": true,
         "abstained": false,
         "bytes": 12005008.0,
-        "seconds": 0.8751429590001862
+        "seconds": 0.8921570000020438
       },
       {
         "a": "smollm2-sft",
@@ -2688,7 +2688,7 @@
         "correct": true,
         "abstained": false,
         "bytes": 12005008.0,
-        "seconds": 0.8313615000001846
+        "seconds": 0.8591238749977492
       },
       {
         "a": "smollm2-135m-root",
@@ -2701,7 +2701,7 @@
         "correct": true,
         "abstained": false,
         "bytes": 12594832.0,
-        "seconds": 0.7938231250000172
+        "seconds": 0.8114763749981648
       },
       {
         "a": "smollm2-135m-root",
@@ -2714,7 +2714,7 @@
         "correct": true,
         "abstained": false,
         "bytes": 12594832.0,
-        "seconds": 0.8313389579998329
+        "seconds": 0.8165672079994692
       },
       {
         "a": "smollm2-135m-root",
@@ -2727,7 +2727,7 @@
         "correct": false,
         "abstained": true,
         "bytes": 12005008.0,
-        "seconds": 1.0269985840000118
+        "seconds": 0.9005720839995774
       },
       {
         "a": "smollm2-lora-merged",
@@ -2740,7 +2740,7 @@
         "correct": false,
         "abstained": true,
         "bytes": 12005008.0,
-        "seconds": 0.8912046660002488
+        "seconds": 0.9027751249996072
       },
       {
         "a": "smollm2-sft",
@@ -2753,7 +2753,7 @@
         "correct": false,
         "abstained": true,
         "bytes": 12005008.0,
-        "seconds": 0.8788769580000917
+        "seconds": 0.9051628330016683
       },
       {
         "a": "smollm2-135m-root",
@@ -2766,7 +2766,7 @@
         "correct": false,
         "abstained": true,
         "bytes": 12005008.0,
-        "seconds": 0.874263124999743
+        "seconds": 0.9030340409990458
       },
       {
         "a": "smollm2-cpt",
@@ -2779,7 +2779,7 @@
         "correct": false,
         "abstained": true,
         "bytes": 12005008.0,
-        "seconds": 0.8688682910001262
+        "seconds": 0.9018236250012706
       },
       {
         "a": "smollm2-sft",
@@ -2792,7 +2792,7 @@
         "correct": false,
         "abstained": true,
         "bytes": 12005008.0,
-        "seconds": 0.8765027499998723
+        "seconds": 0.9061523329983174
       },
       {
         "a": "smollm2-135m-root",
@@ -2805,7 +2805,7 @@
         "correct": false,
         "abstained": true,
         "bytes": 12005008.0,
-        "seconds": 0.8758132090001709
+        "seconds": 0.9056432919969666
       },
       {
         "a": "smollm2-cpt",
@@ -2818,7 +2818,7 @@
         "correct": false,
         "abstained": true,
         "bytes": 12005008.0,
-        "seconds": 0.875254292000136
+        "seconds": 0.9088476249999076
       },
       {
         "a": "smollm2-lora-merged",
@@ -2831,7 +2831,7 @@
         "correct": false,
         "abstained": true,
         "bytes": 12005008.0,
-        "seconds": 0.874058791999687
+        "seconds": 0.9051252500030387
       },
       {
         "a": "smollm2-sft",
@@ -2844,7 +2844,7 @@
         "correct": false,
         "abstained": true,
         "bytes": 12005008.0,
-        "seconds": 0.8634014170002047
+        "seconds": 0.898362707997876
       },
       {
         "a": "smollm2-135m-root",
@@ -2857,7 +2857,7 @@
         "correct": false,
         "abstained": true,
         "bytes": 12005008.0,
-        "seconds": 0.8750484580000375
+        "seconds": 0.9196377500011295
       },
       {
         "a": "smollm2-lora-merged",
@@ -2870,7 +2870,7 @@
         "correct": false,
         "abstained": true,
         "bytes": 12005008.0,
-        "seconds": 0.87504991600008
+        "seconds": 0.9087148750004417
       },
       {
         "a": "smollm2-sft",
@@ -2883,7 +2883,7 @@
         "correct": false,
         "abstained": true,
         "bytes": 12005008.0,
-        "seconds": 0.8703390829996351
+        "seconds": 0.894447416998446
       },
       {
         "a": "smollm2-135m-root",
@@ -2896,7 +2896,7 @@
         "correct": false,
         "abstained": true,
         "bytes": 11989752.0,
-        "seconds": 0.8638778340000499
+        "seconds": 0.9196315000008326
       }
     ],
     "per_relation": {
@@ -3044,7 +3044,7 @@
           "abstained": false,
           "accepted_kwarg": true,
           "bytes": 17992256.0,
-          "seconds": 0.8852400839996335
+          "seconds": 0.9197647080000024
         },
         {
           "a": "smollm2-135m-root",
@@ -3058,7 +3058,7 @@
           "abstained": false,
           "accepted_kwarg": true,
           "bytes": 17992256.0,
-          "seconds": 0.8493907090000903
+          "seconds": 0.8797095419977268
         },
         {
           "a": "smollm2-sft",
@@ -3072,7 +3072,7 @@
           "abstained": false,
           "accepted_kwarg": true,
           "bytes": 18007512.0,
-          "seconds": 0.8892127079998318
+          "seconds": 0.9198595000016212
         }
       ]
     }
@@ -3121,7 +3121,7 @@
           "smollm2-lora-merged": 0.5
         },
         "bytes": 3138296.0,
-        "seconds": 0.044862707999982376,
+        "seconds": 0.06259604200022295,
         "full_bytes": 1884013688.0
       },
       {
@@ -3163,7 +3163,7 @@
           "smollm2-lora-merged": 0.3
         },
         "bytes": 2703952.0,
-        "seconds": 0.03567733299996689,
+        "seconds": 0.04157820799809997,
         "full_bytes": 1888422736.0
       },
       {
@@ -3182,31 +3182,29 @@
           "smollm2-vocab-ext-trained"
         ],
         "selected": [
-          "smollm2-sft",
-          "smollm2-cpt",
-          "smollm2-vocab-ext-trained"
+          "smollm2-sft"
         ],
-        "precision": 0.6666666666666666,
-        "recall": 1.0,
-        "f1": 0.8,
-        "mixing_mae": 0.1435979441222103,
-        "mixing_mae_true_parents_only": 0.17949743015276284,
-        "residual": 0.5264246343728113,
-        "r2": 0.7228771043254519,
+        "precision": 1.0,
+        "recall": 0.5,
+        "f1": 0.6666666666666666,
+        "mixing_mae": 0.16,
+        "mixing_mae_true_parents_only": 0.4,
+        "residual": 0.6929149869131366,
+        "r2": 0.5198688209111677,
         "solver": "nnls+l1+simplex",
         "predicted": {
-          "smollm2-sft": 0.5409917305275755,
-          "smollm2-cpt": 0.10001340916689877,
+          "smollm2-sft": 1.0,
+          "smollm2-cpt": 0.0,
           "control-rand-init-b": 0.0,
           "smollm2-sft-prune-struct10": 0.0,
-          "smollm2-vocab-ext-trained": 0.3589948603055258
+          "smollm2-vocab-ext-trained": 0.0
         },
         "truth": {
           "smollm2-sft": 0.6,
           "smollm2-cpt": 0.4
         },
         "bytes": 3138296.0,
-        "seconds": 0.04362200000014127,
+        "seconds": 0.04908129099931102,
         "full_bytes": 1884013688.0
       },
       {
@@ -3251,19 +3249,19 @@
           "smollm2-cpt": 0.2
         },
         "bytes": 2718576.0,
-        "seconds": 0.0377163749999454,
+        "seconds": 0.041242749997763894,
         "full_bytes": 2436528240.0
       }
     ],
     "overall": {
       "n": 4,
-      "precision": 0.9166666666666666,
-      "recall": 0.9166666666666666,
-      "f1": 0.8999999999999999,
-      "mixing_mae": 0.06595853356961606,
-      "mixing_mae_true_parents_only": 0.10860007473063477,
-      "residual": 0.5825867055887316,
-      "r2": 0.6420898134125959,
+      "precision": 1.0,
+      "recall": 0.7916666666666666,
+      "f1": 0.8666666666666667,
+      "mixing_mae": 0.07005904753906349,
+      "mixing_mae_true_parents_only": 0.16372571719244405,
+      "residual": 0.624209293723813,
+      "r2": 0.5913377425590248,
       "exact_parent_set": 0.5
     },
     "by_method": {
@@ -3291,26 +3289,26 @@
       },
       "ties": {
         "n": 2,
-        "precision": 0.8333333333333333,
-        "recall": 0.8333333333333333,
-        "f1": 0.8,
-        "mixing_mae": 0.11748657868196385,
-        "mixing_mae_true_parents_only": 0.18112392831809884,
-        "residual": 0.6212073131354435,
-        "r2": 0.6051177179136227,
+        "precision": 1.0,
+        "recall": 0.5833333333333333,
+        "f1": 0.7333333333333334,
+        "mixing_mae": 0.1256876066208587,
+        "mixing_mae_true_parents_only": 0.29137521324171745,
+        "residual": 0.7044524894056061,
+        "r2": 0.5036135762064806,
         "exact_parent_set": 0.0
       }
     },
     "by_parent_count": {
       "2": {
         "n": 3,
-        "precision": 0.8888888888888888,
-        "recall": 1.0,
-        "f1": 0.9333333333333332,
-        "mixing_mae": 0.057486307012248945,
-        "mixing_mae_true_parents_only": 0.08388329081303474,
-        "residual": 0.538118943485617,
-        "r2": 0.6936669740495299,
+        "precision": 1.0,
+        "recall": 0.8333333333333334,
+        "f1": 0.8888888888888888,
+        "mixing_mae": 0.06295365897151219,
+        "mixing_mae_true_parents_only": 0.15738414742878046,
+        "residual": 0.5936157276657253,
+        "r2": 0.6259975462447686,
         "exact_parent_set": 0.6666666666666666
       },
       "3": {
@@ -3334,8 +3332,8 @@
         "bytes_median": 67522776.0,
         "bytes_total": 13503515921.0,
         "bytes_mean": 71071136.42631578,
-        "seconds_median": 0.034457729499763445,
-        "seconds_total": 5.402826332001496,
+        "seconds_median": 0.03614531250059372,
+        "seconds_total": 5.794686282999464,
         "full_download_bytes_median": 538121104.0,
         "full_download_bytes_total": 107235614224.0,
         "reduction_median": 7.969475425595654,
@@ -3349,8 +3347,8 @@
         "bytes_median": 16575872.0,
         "bytes_total": 2303499664.0,
         "bytes_mean": 12123682.442105263,
-        "seconds_median": 0.059290145499971914,
-        "seconds_total": 8.680903532994307,
+        "seconds_median": 0.06177070850026212,
+        "seconds_total": 9.045470703982573,
         "full_download_bytes_median": 538121104.0,
         "full_download_bytes_total": 107235614224.0,
         "reduction_median": 32.46412037930795,
@@ -3364,8 +3362,8 @@
         "bytes_median": 16575872.0,
         "bytes_total": 2303499664.0,
         "bytes_mean": 12123682.442105263,
-        "seconds_median": 0.12374039599990283,
-        "seconds_total": 17.730349915002535,
+        "seconds_median": 0.12965591700049117,
+        "seconds_total": 18.45305225001721,
         "full_download_bytes_median": 538121104.0,
         "full_download_bytes_total": 107235614224.0,
         "reduction_median": 32.46412037930795,
@@ -3379,8 +3377,8 @@
         "bytes_median": 38989184.0,
         "bytes_total": 5304524176.0,
         "bytes_mean": 27918548.294736844,
-        "seconds_median": 0.101562854499889,
-        "seconds_total": 14.594011914001385,
+        "seconds_median": 0.10737604199857742,
+        "seconds_total": 16.405899963017873,
         "full_download_bytes_median": 538121104.0,
         "full_download_bytes_total": 107235614224.0,
         "reduction_median": 13.801804726151746,
@@ -3394,8 +3392,8 @@
         "bytes_median": 67522788.0,
         "bytes_total": 1966059232.0,
         "bytes_mean": 70216401.14285715,
-        "seconds_median": 0.8728197714999624,
-        "seconds_total": 23.884997670000303,
+        "seconds_median": 0.8994673959987267,
+        "seconds_total": 24.518368580989772,
         "full_download_bytes_median": 538121104.0,
         "full_download_bytes_total": 15609203976.0,
         "reduction_median": 7.969474009278171,
@@ -3423,107 +3421,107 @@
   "sketch_stats": {
     "control-rand-init-a": {
       "bytes": 27758896.0,
-      "seconds": 1.000698833000115,
+      "seconds": 1.0672113750006247,
       "requests": 54.0
     },
     "control-rand-init-b": {
       "bytes": 27758896.0,
-      "seconds": 0.8835263330001908,
+      "seconds": 0.9037599170005706,
       "requests": 54.0
     },
     "distilgpt2": {
       "bytes": 113270618.0,
-      "seconds": 2.0643093749999935,
+      "seconds": 2.1076292090001516,
       "requests": 119.0
     },
     "gpt2-int8": {
       "bytes": 12599397.0,
-      "seconds": 0.47688766700002816,
+      "seconds": 0.49508350000178325,
       "requests": 39.0
     },
     "gpt2-root": {
       "bytes": 25183913.0,
-      "seconds": 0.4815270829999463,
+      "seconds": 0.5009283750005125,
       "requests": 39.0
     },
     "smollm2-135m-root": {
       "bytes": 27758884.0,
-      "seconds": 0.9450437089999468,
+      "seconds": 0.9651841660015634,
       "requests": 54.0
     },
     "smollm2-cpt": {
       "bytes": 27758896.0,
-      "seconds": 0.9805836670002464,
+      "seconds": 0.9954532080009812,
       "requests": 54.0
     },
     "smollm2-distil-half": {
       "bytes": 27743640.0,
-      "seconds": 0.9320937500001492,
+      "seconds": 0.9691725000011502,
       "requests": 54.0
     },
     "smollm2-int8": {
       "bytes": 27758611.0,
-      "seconds": 0.9518176660003519,
+      "seconds": 0.9664966669988644,
       "requests": 54.0
     },
     "smollm2-lora-merged": {
       "bytes": 27758896.0,
-      "seconds": 0.9415066249998745,
+      "seconds": 0.9689361669989012,
       "requests": 54.0
     },
     "smollm2-merge-dare2": {
       "bytes": 27758884.0,
-      "seconds": 0.9551244999997834,
+      "seconds": 0.9760329999990063,
       "requests": 54.0
     },
     "smollm2-merge-slerp": {
       "bytes": 27758884.0,
-      "seconds": 1.0538744159998714,
+      "seconds": 1.0070771669998066,
       "requests": 54.0
     },
     "smollm2-merge-ties2": {
       "bytes": 27758884.0,
-      "seconds": 0.9646020410000347,
+      "seconds": 1.009168166998279,
       "requests": 54.0
     },
     "smollm2-merge-ties3": {
       "bytes": 27758884.0,
-      "seconds": 0.9539424579998013,
+      "seconds": 0.9884637920004025,
       "requests": 54.0
     },
     "smollm2-prune-mag30": {
       "bytes": 27758884.0,
-      "seconds": 0.9800189160000627,
+      "seconds": 1.1111835000010615,
       "requests": 54.0
     },
     "smollm2-sft": {
       "bytes": 27758896.0,
-      "seconds": 0.9622294170003443,
+      "seconds": 1.0080394169999636,
       "requests": 54.0
     },
     "smollm2-sft-int4": {
       "bytes": 27758652.0,
-      "seconds": 0.9491995000003044,
+      "seconds": 1.004407500000525,
       "requests": 54.0
     },
     "smollm2-sft-prune-struct10": {
       "bytes": 27758896.0,
-      "seconds": 0.9535390419996475,
+      "seconds": 1.1440563750002184,
       "requests": 54.0
     },
     "smollm2-vocab-ext": {
       "bytes": 27758884.0,
-      "seconds": 0.9737438749998546,
+      "seconds": 1.0364519169997948,
       "requests": 54.0
     },
     "smollm2-vocab-ext-trained": {
       "bytes": 27758896.0,
-      "seconds": 0.984997999999905,
+      "seconds": 1.049512292000145,
       "requests": 54.0
     }
   },
-  "wall_clock_seconds": 95.10026575000029,
-  "markdown": "## Headline table\n\nBench: `/Users/nagaoyuta/Desktop/Claude code/24-Stemma/bench_models` - 190 labelled pairs (108 related, 82 unrelated, 25 of them HARD same-shape-different-init controls); 28 ordered pairs; 4 merges with 3 decoys each. seed=0, quick=False.\n\n| method | AUC | AP | FPR@95TPR | **FPR hard controls** | DIRECTION ACC | MERGE F1 | MIXING MAE | BYTES/DECISION |\n|---|---|---|---|---|---|---|---|---|\n| **Stemma** | 0.994 | 1.000 | 0.000 | **0.000** | 32.1% (100.0% on answered, 67.9% abstain) | 0.900 | 0.066 | 64.4 MiB |\n| cosine | 0.987 | 0.996 | 0.000 | **0.000** | 50% (chance) | n/a | n/a | 15.8 MiB |\n| CKA/REEF-style | 0.987 | 0.996 | 0.000 | **0.000** | 50% (chance) | n/a | n/a | 15.8 MiB |\n| HuRef-style | 0.981 | 0.994 | 0.000 | **0.000** | 50% (chance) | n/a | n/a | 37.2 MiB |\n\n`n/a` in the merge columns is not a zero: a symmetric fingerprint produces **no mixing coefficients at all**, so there is nothing to score. `50% (chance)` in the direction column is a **structural ceiling** - `cosine(a,b) == cosine(b,a)` by construction, so `baselines.baseline_direction` abstains on every pair and a coin flip is the best a symmetric statistic can do. It is not a tuning failure.\n\nFull download of both checkpoints in a median decision: **513.2 MiB** (from safetensors headers - nothing was downloaded).\n\n## Direction accuracy per relation (Stemma)\n\ndocs/FINDINGS.md 5.1 makes this table mandatory: an aggregate would let the easy scar-bearing edges hide the hard scar-free ones.\n\n| relation | group | n | accuracy | acc. on answered | abstained | mean \\|llr\\| |\n|---|---|---|---|---|---|---|\n| sft | scar-free | 1 | 0.0% | n/a | 100.0% | 0.02 |\n| lora | scar-free | 1 | 0.0% | n/a | 100.0% | 0.01 |\n| cpt | scar-free | 1 | 0.0% | n/a | 100.0% | 0.02 |\n| quant | scar-bearing | 3 | 100.0% | 100.0% | 0.0% | 2.80 |\n| prune | scar-bearing | 2 | 100.0% | 100.0% | 0.0% | 2.65 |\n| vocab | scar-bearing | 2 | 100.0% | 100.0% | 0.0% | 4.98 |\n| merge | structural / cross-arch | 9 | 0.0% | n/a | 100.0% | 0.01 |\n| distilled | structural / cross-arch | 2 | 0.0% | n/a | 100.0% | 0.07 |\n| other | other | 7 | 28.6% | 100.0% | 71.4% | 0.75 |\n\n## Outgroup rooting (scar-free relations only)\n\n| variant | n | accuracy | acc. on answered | abstained |\n|---|---|---|---|---|\n| without outgroup | 3 | 0.0% | n/a | 100.0% |\n| **with outgroup** | 3 | 100.0% | 100.0% | 0.0% |\n\n## Merge recovery breakdown\n\n| slice | n | precision | recall | F1 | mixing MAE | residual |\n|---|---|---|---|---|---|---|\n| all | 4 | 0.917 | 0.917 | 0.900 | 0.066 | 0.583 |\n| method=dare | 1 | 1.000 | 1.000 | 1.000 | 0.001 | 0.702 |\n| method=slerp | 1 | 1.000 | 1.000 | 1.000 | 0.027 | 0.386 |\n| method=ties | 2 | 0.833 | 0.833 | 0.800 | 0.117 | 0.621 |\n| parents=2 | 3 | 0.889 | 1.000 | 0.933 | 0.057 | 0.538 |\n| parents=3 | 1 | 1.000 | 0.667 | 0.800 | 0.091 | 0.716 |\n\nBaselines: **n/a - symmetric fingerprints produce no mixing coefficients**.\n\n## Transfer cost per decision\n\n| method | decisions | median bytes | total bytes | median s | median full download | reduction |\n|---|---|---|---|---|---|---|\n| **Stemma** | 190 | 64.4 MiB | 12.6 GiB | 0.034 | 513.2 MiB | 8.0x |\n| cosine | 190 | 15.8 MiB | 2.1 GiB | 0.059 | 513.2 MiB | 32.5x |\n| CKA/REEF-style | 190 | 15.8 MiB | 2.1 GiB | 0.124 | 513.2 MiB | 32.5x |\n| HuRef-style | 190 | 37.2 MiB | 4.9 GiB | 0.102 | 513.2 MiB | 13.8x |\n| stemma-direction | 28 | 64.4 MiB | 1.8 GiB | 0.873 | 513.2 MiB | 8.0x |\n\nNon-fatal failures: **0** (none).\n\nStemma reports statistical evidence about weight-level similarity and derivation direction. It does not establish provenance as fact.",
+  "wall_clock_seconds": 100.86612562500159,
+  "markdown": "## Headline table\n\nBench: `/Users/nagaoyuta/Desktop/Claude code/24-Stemma/bench_models` - 190 labelled pairs (108 related, 82 unrelated, 25 of them HARD same-shape-different-init controls); 28 ordered pairs; 4 merges with 3 decoys each. seed=0, quick=False.\n\n| method | AUC | AP | FPR@95TPR | **FPR hard controls** | DIRECTION ACC | MERGE F1 | MIXING MAE | BYTES/DECISION |\n|---|---|---|---|---|---|---|---|---|\n| **Stemma** | 0.994 | 1.000 | 0.000 | **0.000** | 32.1% (100.0% on answered, 67.9% abstain) | 0.867 | 0.070 | 64.4 MiB |\n| cosine | 0.987 | 0.996 | 0.000 | **0.000** | 50% (chance) | n/a | n/a | 15.8 MiB |\n| CKA/REEF-style | 0.987 | 0.996 | 0.000 | **0.000** | 50% (chance) | n/a | n/a | 15.8 MiB |\n| HuRef-style | 0.981 | 0.994 | 0.000 | **0.000** | 50% (chance) | n/a | n/a | 37.2 MiB |\n\n`n/a` in the merge columns is not a zero: a symmetric fingerprint produces **no mixing coefficients at all**, so there is nothing to score. `50% (chance)` in the direction column is a **structural ceiling** - `cosine(a,b) == cosine(b,a)` by construction, so `baselines.baseline_direction` abstains on every pair and a coin flip is the best a symmetric statistic can do. It is not a tuning failure.\n\nFull download of both checkpoints in a median decision: **513.2 MiB** (from safetensors headers - nothing was downloaded).\n\n## Direction accuracy per relation (Stemma)\n\ndocs/FINDINGS.md 5.1 makes this table mandatory: an aggregate would let the easy scar-bearing edges hide the hard scar-free ones.\n\n| relation | group | n | accuracy | acc. on answered | abstained | mean \\|llr\\| |\n|---|---|---|---|---|---|---|\n| sft | scar-free | 1 | 0.0% | n/a | 100.0% | 0.02 |\n| lora | scar-free | 1 | 0.0% | n/a | 100.0% | 0.01 |\n| cpt | scar-free | 1 | 0.0% | n/a | 100.0% | 0.02 |\n| quant | scar-bearing | 3 | 100.0% | 100.0% | 0.0% | 2.80 |\n| prune | scar-bearing | 2 | 100.0% | 100.0% | 0.0% | 2.65 |\n| vocab | scar-bearing | 2 | 100.0% | 100.0% | 0.0% | 4.98 |\n| merge | structural / cross-arch | 9 | 0.0% | n/a | 100.0% | 0.01 |\n| distilled | structural / cross-arch | 2 | 0.0% | n/a | 100.0% | 0.07 |\n| other | other | 7 | 28.6% | 100.0% | 71.4% | 0.75 |\n\n## Outgroup rooting (scar-free relations only)\n\n| variant | n | accuracy | acc. on answered | abstained |\n|---|---|---|---|---|\n| without outgroup | 3 | 0.0% | n/a | 100.0% |\n| **with outgroup** | 3 | 100.0% | 100.0% | 0.0% |\n\n## Merge recovery breakdown\n\n| slice | n | precision | recall | F1 | mixing MAE | residual |\n|---|---|---|---|---|---|---|\n| all | 4 | 1.000 | 0.792 | 0.867 | 0.070 | 0.624 |\n| method=dare | 1 | 1.000 | 1.000 | 1.000 | 0.001 | 0.702 |\n| method=slerp | 1 | 1.000 | 1.000 | 1.000 | 0.027 | 0.386 |\n| method=ties | 2 | 1.000 | 0.583 | 0.733 | 0.126 | 0.704 |\n| parents=2 | 3 | 1.000 | 0.833 | 0.889 | 0.063 | 0.594 |\n| parents=3 | 1 | 1.000 | 0.667 | 0.800 | 0.091 | 0.716 |\n\nBaselines: **n/a - symmetric fingerprints produce no mixing coefficients**.\n\n## Transfer cost per decision\n\n| method | decisions | median bytes | total bytes | median s | median full download | reduction |\n|---|---|---|---|---|---|---|\n| **Stemma** | 190 | 64.4 MiB | 12.6 GiB | 0.036 | 513.2 MiB | 8.0x |\n| cosine | 190 | 15.8 MiB | 2.1 GiB | 0.062 | 513.2 MiB | 32.5x |\n| CKA/REEF-style | 190 | 15.8 MiB | 2.1 GiB | 0.130 | 513.2 MiB | 32.5x |\n| HuRef-style | 190 | 37.2 MiB | 4.9 GiB | 0.107 | 513.2 MiB | 13.8x |\n| stemma-direction | 28 | 64.4 MiB | 1.8 GiB | 0.899 | 513.2 MiB | 8.0x |\n\nNon-fatal failures: **0** (none).\n\nStemma reports statistical evidence about weight-level similarity and derivation direction. It does not establish provenance as fact.",
   "figure_captions": [
     "fig1_direction_accuracy.png - Direction accuracy per method. Every baseline sits exactly on the 0.50 chance line because cosine/CKA/HuRef statistics are symmetric in their two arguments; no amount of tuning moves them. Stemma's bar is the aggregate only - see fig6 for the per-relation breakdown that matters.",
     "fig2_roc.png - Relatedness ROC curves. All four methods can rank related above unrelated; this axis is where the symmetric baselines are genuinely competitive. The dotted 95%-TPR line is the operating point at which the hard-control false-positive rate in the headline table is measured.",

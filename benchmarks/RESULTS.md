@@ -6,7 +6,7 @@ Bench: `/Users/nagaoyuta/Desktop/Claude code/24-Stemma/bench_models` - 190 label
 
 | method | AUC | AP | FPR@95TPR | **FPR hard controls** | DIRECTION ACC | MERGE F1 | MIXING MAE | BYTES/DECISION |
 |---|---|---|---|---|---|---|---|---|
-| **Stemma** | 0.994 | 1.000 | 0.000 | **0.000** | 32.1% (100.0% on answered, 67.9% abstain) | 0.900 | 0.066 | 64.4 MiB |
+| **Stemma** | 0.994 | 1.000 | 0.000 | **0.000** | 32.1% (100.0% on answered, 67.9% abstain) | 0.867 | 0.070 | 64.4 MiB |
 | cosine | 0.987 | 0.996 | 0.000 | **0.000** | 50% (chance) | n/a | n/a | 15.8 MiB |
 | CKA/REEF-style | 0.987 | 0.996 | 0.000 | **0.000** | 50% (chance) | n/a | n/a | 15.8 MiB |
 | HuRef-style | 0.981 | 0.994 | 0.000 | **0.000** | 50% (chance) | n/a | n/a | 37.2 MiB |
@@ -42,11 +42,11 @@ docs/FINDINGS.md 5.1 makes this table mandatory: an aggregate would let the easy
 
 | slice | n | precision | recall | F1 | mixing MAE | residual |
 |---|---|---|---|---|---|---|
-| all | 4 | 0.917 | 0.917 | 0.900 | 0.066 | 0.583 |
+| all | 4 | 1.000 | 0.792 | 0.867 | 0.070 | 0.624 |
 | method=dare | 1 | 1.000 | 1.000 | 1.000 | 0.001 | 0.702 |
 | method=slerp | 1 | 1.000 | 1.000 | 1.000 | 0.027 | 0.386 |
-| method=ties | 2 | 0.833 | 0.833 | 0.800 | 0.117 | 0.621 |
-| parents=2 | 3 | 0.889 | 1.000 | 0.933 | 0.057 | 0.538 |
+| method=ties | 2 | 1.000 | 0.583 | 0.733 | 0.126 | 0.704 |
+| parents=2 | 3 | 1.000 | 0.833 | 0.889 | 0.063 | 0.594 |
 | parents=3 | 1 | 1.000 | 0.667 | 0.800 | 0.091 | 0.716 |
 
 Baselines: **n/a - symmetric fingerprints produce no mixing coefficients**.
@@ -55,11 +55,11 @@ Baselines: **n/a - symmetric fingerprints produce no mixing coefficients**.
 
 | method | decisions | median bytes | total bytes | median s | median full download | reduction |
 |---|---|---|---|---|---|---|
-| **Stemma** | 190 | 64.4 MiB | 12.6 GiB | 0.034 | 513.2 MiB | 8.0x |
-| cosine | 190 | 15.8 MiB | 2.1 GiB | 0.059 | 513.2 MiB | 32.5x |
-| CKA/REEF-style | 190 | 15.8 MiB | 2.1 GiB | 0.124 | 513.2 MiB | 32.5x |
-| HuRef-style | 190 | 37.2 MiB | 4.9 GiB | 0.102 | 513.2 MiB | 13.8x |
-| stemma-direction | 28 | 64.4 MiB | 1.8 GiB | 0.873 | 513.2 MiB | 8.0x |
+| **Stemma** | 190 | 64.4 MiB | 12.6 GiB | 0.036 | 513.2 MiB | 8.0x |
+| cosine | 190 | 15.8 MiB | 2.1 GiB | 0.062 | 513.2 MiB | 32.5x |
+| CKA/REEF-style | 190 | 15.8 MiB | 2.1 GiB | 0.130 | 513.2 MiB | 32.5x |
+| HuRef-style | 190 | 37.2 MiB | 4.9 GiB | 0.107 | 513.2 MiB | 13.8x |
+| stemma-direction | 28 | 64.4 MiB | 1.8 GiB | 0.899 | 513.2 MiB | 8.0x |
 
 Non-fatal failures: **0** (none).
 

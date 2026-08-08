@@ -123,7 +123,7 @@ same-architecture-different-seed controls**, 28 ordered pairs, 4 merges each aga
 
 | method | AUC | AP | FPR@95TPR | **FPR hard controls** | direction | merge F1 | mixing MAE |
 |---|---|---|---|---|---|---|---|
-| **Stemma** | **0.994** | **1.000** | **0.000** | **0.000** | **100% on answered** (32.1% raw, 67.9% abstain) | **0.900** | **0.066** |
+| **Stemma** | **0.994** | **1.000** | **0.000** | **0.000** | **100% on answered** (32.1% raw, 67.9% abstain) | **0.867** | **0.070** |
 | cosine | 0.987 | 0.996 | 0.000 | 0.000 | 50% — structural | n/a | n/a |
 | CKA / REEF-style | 0.987 | 0.996 | 0.000 | 0.000 | 50% — structural | n/a | n/a |
 | HuRef-style | 0.981 | 0.994 | 0.000 | 0.000 | 50% — structural | n/a | n/a |
@@ -168,10 +168,21 @@ ambiguous edge resolves:
 
 | slice | n | precision | recall | F1 | mixing MAE | residual |
 |---|---|---|---|---|---|---|
-| all | 4 | 0.917 | 0.917 | **0.900** | **0.066** | 0.583 |
-| DARE | 1 | 1.000 | 1.000 | 1.000 | **0.001** | 0.702 |
-| SLERP | 1 | 1.000 | 1.000 | 1.000 | 0.027 | 0.386 |
-| TIES | 2 | 0.833 | 0.833 | 0.800 | 0.117 | 0.621 |
+| all | 4 | **1.000** | 0.792 | 0.867 | 0.070 | 0.624 |
+| DARE | 1 | 1.000 | 1.000 | **1.000** | **0.001** | 0.702 |
+| SLERP | 1 | 1.000 | 1.000 | **1.000** | 0.027 | 0.386 |
+| TIES | 2 | 1.000 | 0.583 | 0.733 | 0.126 | 0.704 |
+| 3 parents | 1 | 1.000 | 0.667 | 0.800 | 0.091 | 0.716 |
+
+**Precision is 1.000: the decomposer now names no false parent at all.** That is deliberately
+bought with recall (0.792), because for a provenance tool a false parent is an assertion about a
+model that had nothing to do with the child, which is worse than a miss — the same reason direction
+abstains rather than guesses. The change came from dropping *degenerate* candidates whose task
+vector is numerically zero against the inferred base (the base itself, and models differing from it
+only in tensors the sampler never reads): they cannot explain the child, yet the sum-to-one
+constraint handed them weight. Measured on the harder open setting — all 19 other models as
+candidates with the base inferred rather than given — it takes merge F1 from contaminated output to
+DARE **1.00 / MAE 0.0004**, TIES-2 0.80, SLERP 0.67.
 
 TIES is the weak case and we report it rather than hiding it: its trim-and-sign-elect step is
 non-linear, so a linear decomposition fits poorly (residual 0.62) and mass can leak onto a

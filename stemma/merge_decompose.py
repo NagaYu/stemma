@@ -116,6 +116,24 @@ def _delta_stats(sources: Sequence[Any], before: Tuple[int, int, float, int]) ->
 # --------------------------------------------------------------------------- #
 
 
+#: A candidate task vector shorter than this fraction of the CHILD's own task
+#: vector is numerically zero and is removed before solving.
+#:
+#: The reference must be the child, never the largest column. Scaling by the
+#: largest column was measured to be catastrophic: the biggest task vectors
+#: belong to heavily modified models (pruned, ~0.1) while a true fine-tune
+#: parent sits at ~0.0008, a ratio of 0.008 -- so a 1%-of-max rule deleted the
+#: true parents and merge F1 collapsed from 0.57 to 0.00 with the residual
+#: exploding to 127. Magnitudes here span orders of magnitude, and a
+#: relative-to-max threshold is exactly the wrong tool for that, the same trap
+#: that sank the proximity gate.
+#:
+#: The columns actually being targeted are *exactly* zero: the inferred base
+#: (``B - B``) and models that differ from the base only in tensors the sampler
+#: never reads. 1e-6 catches those and nothing else.
+ZERO_TASK_VECTOR_FRACTION: float = 1e-6
+
+
 def pick_common_tensors(
     sources: Sequence[Any],
     min_params: int = DEFAULT_MIN_PARAMS,
@@ -741,6 +759,36 @@ def decompose_merge(
         if float(np.linalg.norm(y)) <= 1e-12 or float(np.max(col_norms)) <= 1e-12:
             log.debug("degenerate task vectors; falling back to raw-weight decomposition")
             used_task_vectors = False
+
+    # Drop candidates whose task vector is ~zero relative to the base. Such a
+    # column cannot explain any of the child's deviation, but under the
+    # sum-to-one constraint it happily ABSORBS weight, which both invents false
+    # parents and drags the true ones down. Measured on smollm2-merge-ties2
+    # (truth sft 0.6 / cpt 0.4) with all 19 other models as candidates: the
+    # inferred base itself (task vector identically zero) plus vocab-ext and
+    # vocab-ext-trained -- which differ from the base only in embedding rows the
+    # sampler never reads -- each took exactly 0.1197, while sft fell to 0.5410
+    # and cpt to 0.1000. They are degenerate columns, not parents.
+    degenerate: List[str] = []
+    if used_task_vectors:
+        col_norms = np.linalg.norm(T, axis=1)
+        y_norm = float(np.linalg.norm(y))
+        if y_norm > 0.0 and col_norms.size:
+            keep_cols = col_norms >= ZERO_TASK_VECTOR_FRACTION * y_norm
+            if not keep_cols.all():
+                degenerate = [kept_names[i] for i in np.nonzero(~keep_cols)[0].tolist()]
+                log.info(
+                    "%s: dropping %d degenerate candidate(s) whose task vector is ~0 "
+                    "relative to the base (they cannot explain the child, but the "
+                    "simplex constraint would hand them weight): %s",
+                    child_name, len(degenerate), ", ".join(degenerate),
+                )
+                T = T[keep_cols]
+                kept_names = [n for n, k in zip(kept_names, keep_cols.tolist()) if k]
+                keep_idx = [i for i, k in zip(keep_idx, keep_cols.tolist()) if k]
+                n_k = len(keep_idx)
+                if n_k == 0:
+                    used_task_vectors = False
 
     if used_task_vectors:
         method = "nnls+l1"
