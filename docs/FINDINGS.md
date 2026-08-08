@@ -109,13 +109,17 @@ rather than one blended accuracy.
 `DirectionModel.fit()` exists and works, and we do not use its output as the default. Fitting an
 L2 logistic regression on the benchmark's labelled ordered pairs (21 train / 7 held out):
 
-| combiner | held-out accuracy on decided |
-|---|---|
-| hand-set priors (derived from irreversibility) | **1.000** |
-| fitted logistic regression | **0.500** — chance |
+| combiner | held-out (same split, n=7) | decided | abstained | accuracy on decided |
+|---|---|---|---|---|
+| hand-set priors (derived from irreversibility) | | 2 | 5 | **1.000** |
+| fitted logistic regression | | 4 | 3 | **0.500** — chance |
 
-The failure is instructive rather than mysterious. With **21 training pairs and 13 features** the
-problem is underdetermined, so the fit chases noise:
+**Read the accuracy column with its sample size.** The priors abstained on 5 of the 7 held-out
+pairs and decided only 2, so "1.000 vs 0.500" rests on 2 decisions against 4. It is suggestive,
+not conclusive, and a larger labelled corpus could overturn it.
+
+The *decisive* evidence is not the accuracy — it is what the fit learned. With **21 training pairs
+and 13 features** the problem is underdetermined, so the fit chases noise:
 
 - `lattice_asym` was assigned **−0.119**, i.e. "the model carrying the quantisation lattice is the
   *parent*". That is physically impossible — dequantisation cannot restore the values that

@@ -266,10 +266,13 @@ measurements taken during development. Read it before trusting a verdict.
    hypotheses for a human, which is what the disclaimer says.
 10. **Fitting the combiner made it worse than the hand-set priors, so we ship the priors.** An L2
     logistic regression fitted on the benchmark's labelled pairs (21 train / 7 held out) scored
-    **0.500 held-out accuracy on decided — chance — against 1.000 for the priors**. With 13
-    features and 21 pairs the problem is underdetermined: the fit gave `lattice_asym` a *negative*
-    weight, i.e. "the quantised model is the parent", which is physically impossible, and put its
-    largest weight on the statistic measured as the weakest. `--fit` remains available for anyone
+    **0.500 accuracy on decided — chance — against 1.000 for the priors** on the same split.
+    Read that with its sample size: the priors abstained on 5 of 7 and decided only 2, so the
+    accuracy gap rests on 2 decisions against 4 and is suggestive rather than conclusive. The
+    decisive evidence is *what the fit learned*: with 13 features and 21 pairs the problem is
+    underdetermined, and it gave `lattice_asym` a **negative** weight — "the quantised model is
+    the parent" — which is physically impossible, while putting its largest weight on the
+    statistic already measured as the weakest. `--fit` remains available for anyone
     with a larger labelled corpus, and `fit_report.json` records the comparison. See
     [`docs/FINDINGS.md` §5c](docs/FINDINGS.md).
 11. **`stemma trace` over many small models saves nothing.** The per-model sampling floor is
