@@ -1088,6 +1088,7 @@ def build_phylogeny(
     proximity_factor: float = 0.0,  # OFF by default -- see PROXIMITY_FACTOR
     reduce_transitive: bool = True,
     cousin_veto_enabled: bool = True,
+    auto_outgroup: int = 0,  # OFF -- see _pick_outgroups
     **kw: Any,
 ) -> Phylogeny:
     """Reconstruct a multi-parent lineage DAG over ``models``.
@@ -1238,7 +1239,12 @@ def build_phylogeny(
     edges: List[Edge] = []
     verdicts: Dict[Tuple[ModelRef, ModelRef], Any] = {}
     n_unknown = 0
+    n_rooted = 0
     for a, b, score in related:
+        # Hand the estimator an outgroup. Without one, family (e) is inactive and
+        # a scar-free edge abstains by design -- which is why merge-ties2 came
+        # back with "no ancestors" even though its parents were in the universe.
+        outgroups = _pick_outgroups(a, b, nodes, all_sketches, int(auto_outgroup))
         try:
             v = _call_tolerant(
                 direction_mod.estimate_direction,
@@ -1248,6 +1254,7 @@ def build_phylogeny(
                 abstain=direction_abstain,
                 sa=all_sketches.get(a),
                 sb=all_sketches.get(b),
+                outgroup=outgroups or None,
                 seed=seed,
                 **kw,
             )
@@ -1335,6 +1342,7 @@ def build_phylogeny(
     }
     meta["proximity_gate"] = gate_info
     meta["cousin_veto"] = cousin_info
+    meta["auto_outgroup"] = int(auto_outgroup)
     result = Phylogeny(nodes=nodes, edges=edges, root_candidates=roots, meta=meta)
     if reduce_transitive:
         result = transitive_reduction(result)
@@ -1444,6 +1452,72 @@ def _edge_label(e: Edge) -> str:
     if e.weight is not None and not math.isnan(float(e.weight)):
         label = f"{e.relation} w={float(e.weight):.2f} c={float(e.confidence):.2f}"
     return label
+
+
+def _pick_outgroups(
+    a: ModelRef,
+    b: ModelRef,
+    nodes: Sequence[ModelRef],
+    sketches: Mapping[ModelRef, Sketch],
+    n: int,
+) -> List[ModelRef]:
+    """Nearest relatives of both endpoints, to root a scar-free pair.
+
+    Claim: direction -- outgroup rooting measured 0% -> 100% on scar-free
+    sft/lora/cpt edges, but it only fires when a third model is actually handed
+    to :func:`stemma.direction.estimate_direction`, and nothing was handing one
+    over: the benchmark supplied outgroups by hand while ``build_phylogeny``
+    silently ran without them, so every scar-free edge abstained and the true
+    parents never entered the DAG at all.
+
+    Selection is done in **sketch space**, which costs no extra bytes: the
+    sketches are already in memory from retrieval. Candidates are ranked by
+    ``d(C, a) + d(C, b)`` and the closest ``n`` are returned.
+
+    **MEASURED FAILURE -- this is OFF by default** (``auto_outgroup=0``).
+    "Nearest relative of both endpoints" is the wrong selection rule, and
+    systematically the worst possible one: the nearest relative of a merge child
+    *is one of its parents*. Rooting assumes the outgroup is a **sibling**
+    descending from a shared ancestor, never an ancestor or descendant of either
+    endpoint, so feeding it a parent inverts the signal.
+
+    Measured on ``sft`` vs ``merge-ties2`` (``sft`` is the true parent, so the
+    wanted answer is ``a->b``), where the rule picked ``cpt`` -- the *other*
+    parent of ``ties2``::
+
+        without outgroup:  llr = +0.0093   (abstains, sign correct)
+        with outgroup:     llr = -0.4411   (abstains, sign now WRONG)
+
+    ``ties2`` contains ``0.4 * cpt``, so it sits closer to ``cpt`` than ``sft``
+    does; the statistic reads that as "``ties2`` is nearer the root" and flips.
+    End to end it also strengthened a *false* edge from confidence 0.89 to 1.00.
+
+    A correct selector must exclude ancestors and descendants of both endpoints
+    -- which is what :func:`cousin_veto` already identifies -- rather than
+    ranking by proximity. That is the next step, and it is not implemented.
+    """
+    if n <= 0:
+        return []
+    from .sketch import sketch_distance  # lazy: keeps import graph acyclic
+
+    sa, sb = sketches.get(a), sketches.get(b)
+    if sa is None or sb is None:
+        return []
+    scored: List[Tuple[float, ModelRef]] = []
+    for c in nodes:
+        if c == a or c == b:
+            continue
+        sc = sketches.get(c)
+        if sc is None:
+            continue
+        try:
+            d = float(sketch_distance(sc, sa)) + float(sketch_distance(sc, sb))
+        except Exception:  # pragma: no cover - defensive
+            continue
+        if math.isfinite(d):
+            scored.append((d, c))
+    scored.sort(key=lambda t: t[0])
+    return [c for _d, c in scored[: int(n)]]
 
 
 def _gate_rows(meta: Any, max_rows: int) -> np.ndarray:

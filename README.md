@@ -305,9 +305,26 @@ measurements taken during development. Read it before trusting a verdict.
      `cpt` is a genuine parent of it. That is the one false veto in 6 (cos 0.0429 via `sft`).
    - **The true parents are missing for a different reason entirely.** `trace` still reports
      *no ancestors* for `merge-ties2`, because direction **abstains** on its scar-free
-     `sft`/`cpt` edges (limitation #2) so no edge is ever created. Outgroup rooting fixes exactly
-     that, but `build_phylogeny` does not yet supply siblings as outgroups automatically — the
-     clearest next step.
+     `sft`/`cpt` edges (limitation #2) so no edge is ever created.
+
+   **Auto-supplying outgroups was tried and made things worse; it ships disabled**
+   (`build_phylogeny(..., auto_outgroup=0)`). Outgroup rooting measures 0% → 100% on scar-free
+   edges *when given a valid sibling*, and `build_phylogeny` was never handing one over — but
+   selecting one by "nearest relative of both endpoints" is systematically the **worst** rule,
+   because the nearest relative of a merge child *is one of its parents*. Rooting requires a
+   sibling, never an ancestor or descendant. Measured on `sft` vs `merge-ties2` (`sft` is the true
+   parent), where the rule picked `cpt` — the *other* parent:
+
+   | | llr | verdict |
+   |---|---|---|
+   | without outgroup | **+0.0093** | abstains, sign correct |
+   | with auto outgroup | **−0.4411** | abstains, sign now **wrong** |
+
+   `ties2` contains `0.4·cpt`, so it sits closer to `cpt` than `sft` does; the statistic reads that
+   as "`ties2` is nearer the root" and inverts. End to end it also strengthened a *false* edge from
+   confidence 0.89 to 1.00. A correct selector must **exclude ancestors and descendants of both
+   endpoints** — which `cousin_veto` already identifies — instead of ranking by proximity. That is
+   the next step and it is not implemented.
    `transitive_reduction`, which removes an ancestor edge already implied by a longer path, **is**
    enabled by default: it is pure topology and costs no bytes.
 10. **Fitting the combiner made it worse than the hand-set priors, so we ship the priors.** An L2
