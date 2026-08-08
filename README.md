@@ -367,10 +367,18 @@ Exit codes: `0` ok, `1` error, `2` trace succeeded but rights conflicts were fou
 
 ## Links
 
-- **Space (demo):** `https://huggingface.co/spaces/<org>/stemma` — *placeholder, fill in after the first `scripts/push_space.py --push`*
-- **Model (fitted `DirectionModel` + sketch config + prebuilt index):** `https://huggingface.co/<org>/stemma-direction` — *placeholder, fill in after the first `scripts/push_model.py --push`*
-- **Dataset (benchmark lineages + ground truth):** `https://huggingface.co/datasets/<org>/stemma-bench` — *placeholder*
-- **Code:** `https://github.com/<user>/stemma` — *placeholder*
+- **Code:** https://github.com/NagaYu/stemma
+- **Model** (`DirectionModel` weights + sketch config + prebuilt ANN index):
+  https://huggingface.co/YutaN13/stemma-direction
+- **Dataset** (benchmark lineage table + ground truth):
+  https://huggingface.co/datasets/YutaN13/stemma-bench
+- **Space (demo):** not deployed. Hugging Face requires a PRO subscription to host a **Gradio**
+  Space on free CPU hardware (`402 Payment Required` on repo creation); only *static* Spaces are
+  free, and `app.py` needs a Python backend. Run it locally instead:
+  ```bash
+  pip install -e ".[app]" && python app.py
+  ```
+  `scripts/push_space.py --repo-id <you>/stemma --push` will deploy it unchanged on a PRO account.
 - Cards: [`MODEL_CARD.md`](MODEL_CARD.md), [`DATASET_CARD.md`](DATASET_CARD.md)
 
 ## Ethics and scope
